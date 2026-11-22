@@ -1,34 +1,55 @@
-from datetime import datetime, timedelta
-from jose import jwt
-import bcrypt
-from app.config import settings
+import sqlite3
+from datetime import datetime, timedelta, timezone
 
-# In-memory store — replace with DB in Phase 2
-users_db = {}
+import bcrypt
+from jose import jwt
+
+from app.config import settings
+from app.database import get_connection
+
+
+def _pw(password: str) -> bytes:
+    # bcrypt only uses the first 72 bytes
+    return password.encode()[:72]
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(_pw(password), bcrypt.gensalt()).decode()
+
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
+    return bcrypt.checkpw(_pw(plain), hashed.encode())
+
 
 def create_token(email: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.TOKEN_EXPIRE_MINUTES)
     return jwt.encode({"sub": email, "exp": expire}, settings.SECRET_KEY, settings.ALGORITHM)
 
+
 def register(name: str, email: str, password: str, accountType: str):
-    if email in users_db:
-        return None
-    users_db[email] = {
-        "name": name,
-        "email": email,
-        "password_hash": hash_password(password),
-        "accountType": accountType,
-    }
-    return users_db[email]
+    email = email.strip().lower()
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO users (name, email, password_hash, account_type) VALUES (?, ?, ?, ?)",
+            (name.strip(), email, hash_password(password), accountType),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        return None  # email already registered
+    finally:
+        conn.close()
+    return {"name": name.strip(), "email": email, "accountType": accountType}
+
 
 def authenticate(email: str, password: str):
-    user = users_db.get(email)
-    if not user or not verify_password(password, user["password_hash"]):
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM users WHERE email = ?", (email.strip().lower(),)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not verify_password(password, row["password_hash"]):
         return None
-    return user
+    return {"name": row["name"], "email": row["email"], "accountType": row["account_type"]}

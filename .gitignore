@@ -1,11 +1,9 @@
 # Python
 backend/venv/
-backend/__pycache__/
-backend/app/__pycache__/
-backend/app/routers/__pycache__/
-backend/app/models/__pycache__/
-backend/app/services/__pycache__/
 backend/.env
+backend/data/
+__pycache__/
+*.pyc
 
 # Node
 intellioptic-frontend/node_modules/
@@ -14,3 +12,4 @@ intellioptic-frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
