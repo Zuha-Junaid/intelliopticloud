@@ -2,11 +2,11 @@ fastapi
 uvicorn
 bcrypt
 python-jose
-pandas
 numpy
-xgboost
-scikit-learn
+xgboost-cpu
 boto3
 pydantic-settings
 python-dotenv
 python-multipart
+sqlalchemy
+psycopg2-binary

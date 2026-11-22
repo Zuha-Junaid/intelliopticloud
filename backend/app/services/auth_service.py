@@ -1,16 +1,16 @@
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from jose import jwt
+from sqlalchemy import insert, select
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
-from app.database import get_connection
+from app.database import engine, users
 
 
 def _pw(password: str) -> bytes:
-    # bcrypt only uses the first 72 bytes
-    return password.encode()[:72]
+    return password.encode()[:72]  # bcrypt only uses the first 72 bytes
 
 
 def hash_password(password: str) -> str:
@@ -27,29 +27,27 @@ def create_token(email: str) -> str:
 
 
 def register(name: str, email: str, password: str, accountType: str):
-    email = email.strip().lower()
-    conn = get_connection()
+    name, email = name.strip(), email.strip().lower()
     try:
-        conn.execute(
-            "INSERT INTO users (name, email, password_hash, account_type) VALUES (?, ?, ?, ?)",
-            (name.strip(), email, hash_password(password), accountType),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
+        with engine.begin() as conn:
+            conn.execute(
+                insert(users).values(
+                    name=name,
+                    email=email,
+                    password_hash=hash_password(password),
+                    account_type=accountType,
+                )
+            )
+    except IntegrityError:
         return None  # email already registered
-    finally:
-        conn.close()
-    return {"name": name.strip(), "email": email, "accountType": accountType}
+    return {"name": name, "email": email, "accountType": accountType}
 
 
 def authenticate(email: str, password: str):
-    conn = get_connection()
-    try:
+    with engine.connect() as conn:
         row = conn.execute(
-            "SELECT * FROM users WHERE email = ?", (email.strip().lower(),)
-        ).fetchone()
-    finally:
-        conn.close()
+            select(users).where(users.c.email == email.strip().lower())
+        ).mappings().first()
     if not row or not verify_password(password, row["password_hash"]):
         return None
     return {"name": row["name"], "email": row["email"], "accountType": row["account_type"]}
