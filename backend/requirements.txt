@@ -3,6 +3,7 @@ uvicorn
 bcrypt
 python-jose
 numpy
+scikit-learn
 xgboost-cpu
 boto3
 pydantic-settings
