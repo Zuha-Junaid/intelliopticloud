@@ -65,7 +65,7 @@ SECRET_KEY=              # long random string
 ```
 
 ## Limitations 
-- **The model is trained on synthetic data.** No real labelled dataset of Lambda right-sizing outcomes exists. The reported accuracy (R2 about 0.999) shows the model learns the generating rule; it is not a measure of real-world savings.
+- **The model is trained on synthetic data.** No real labelled dataset of Lambda right-sizing outcomes exists. The reported accuracy (99.7%) shows the model learns the generating rule; it is not a measure of real-world savings.
 - The 6-month savings chart on the dashboard is **sample data** for illustration. Savings are reported as 0 until optimizations are applied.
 - The system recommends changes; it does not yet apply them to AWS automatically (autonomous execution is Phase 2).
 - The test AWS account runs only a few small Lambda functions, so real costs are near PKR 0.
