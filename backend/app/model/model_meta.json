@@ -1,0 +1,1 @@
+{"accuracy": 99.7, "mae": 2.23, "exact_match": 99.7, "features": ["memory", "invocations", "duration", "cold_ratio", "hour", "util"], "training_samples": 4000, "data": "synthetic"}

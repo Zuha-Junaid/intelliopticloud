@@ -6,162 +6,68 @@
 
 ---
 
-## Overview
-IntelliOptiCloud is a full-stack AI-driven platform that autonomously reduces
-AWS Lambda cloud computing costs by 60–70% for Pakistani startups and SMEs.
-It monitors usage via CloudWatch APIs, applies an XGBoost machine learning model
-to predict optimal configurations, and applies memory right-sizing and spot
-instance switching — all with zero downtime and zero manual intervention.
+AI-driven AWS Lambda cost optimization for Pakistani startups and SMEs. It monitors Lambda functions through CloudWatch, recommends right-sized memory with an XGBoost model, and shows costs in PKR.
 
----
+**Live demo:** https://intellioptic-frontend.vercel.app
+**API:** https://intelliopticloud.onrender.com (docs at `/docs`)
+
+> The backend runs on a free Render instance that sleeps after 15 minutes idle. The first request after a pause can take about 50 seconds.
+
 
 ## Architecture
 
-User/Startup/SME
-↓
-React Frontend (Vercel)
-↓
-FastAPI Backend
-↓
-AWS CloudWatch APIs → Lambda Usage Metrics
-↓
-XGBoost Model (trained on synthetic data)
-↓
-Optimization Engine
-├── Spot Instance Switching
-└── Memory Right-Sizing
-↓
-AWS Lambda Config Update
+| Layer | Technology | Hosting (all free) |
+|---|---|---|
+| Frontend | React (Vite), Tailwind CSS v4, Recharts | Vercel |
+| Backend | FastAPI, Uvicorn, JWT auth (bcrypt + python-jose) | Render |
+| Database | PostgreSQL (SQLAlchemy); SQLite locally | Neon |
+| Monitoring data | AWS CloudWatch and Lambda via boto3 (read-only IAM user) | AWS Free plan |
+| ML | XGBoost regression for memory right-sizing | trained in Google Colab / at backend startup |
+| Source control | Git and GitHub | GitHub |
 
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React.js, Tailwind CSS v4, Recharts, React Router |
-| Backend | FastAPI (Python 3.12), Uvicorn |
-| ML Model | XGBoost, scikit-learn, pandas, numpy |
-| AWS Integration | boto3 (CloudWatch, Lambda) |
-| Auth | bcrypt password hashing, JWT tokens |
-| Hosting | Vercel (frontend), AWS Free Tier (backend) |
-| Version Control | GitHub |
-
----
+Browser (Vercel) -> FastAPI (Render) -> Neon Postgres (accounts), AWS CloudWatch/Lambda (metrics), XGBoost (recommendations).
 
 ## Features
-- ✅ Real-time PKR cost dashboard
-- ✅ AWS Lambda monitoring via CloudWatch APIs
-- ✅ XGBoost model — 99.7% accuracy, trained on 5,000 samples
-- ✅ Autonomous memory right-sizing decisions with confidence scores
-- ✅ Spot instance arbitrage with risk assessment
-- ✅ JWT authentication with bcrypt password hashing
-- ✅ Protected routes — all dashboard pages require login
-- ✅ Fully responsive — mobile, tablet, desktop
-- ✅ Export interface for reports (CSV/PDF)
-- ✅ Real-time notifications for autonomous actions
-- ✅ 1-click AWS connection in Settings
+- Register, login and protected routes. JWT is verified on every data endpoint.
+- Real Lambda inventory, invocations and average duration from CloudWatch (last 30 days). Falls back to mock data if AWS credentials are missing.
+- Memory right-sizing recommendations from an XGBoost model, with confidence scores.
+- Spot-instance suitability recommendations.
+- Cost figures in PKR (rate configurable, default 278 PKR/USD).
+- Dashboard, resources, optimization pipeline, reports and notifications pages, responsive on mobile, tablet and desktop.
 
----
+## API (all under `/api`)
+- Public: `POST /auth/register`, `POST /auth/login`
+- Require `Authorization: Bearer <token>`: `/dashboard/summary`, `/resources/functions`, `/optimization/model-info`, `/optimization/pipeline`, `/optimization/recommendations`, `/optimization/retrain`, `/reports/savings`, `/reports/cost-breakdown`, `/notifications`
 
-## Running Locally
+## Run locally
 
-### Prerequisites
-- Python 3.12
-- Node.js 20+
-
-### Backend
-```bash
+Backend:
+```
 cd backend
-py -3.12 -m venv venv
-venv\Scripts\activate          # Windows
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
-# Runs on http://127.0.0.1:8000
-# API docs at http://127.0.0.1:8000/docs
 ```
-
-### Frontend
-```bash
+Frontend:
+```
 cd intellioptic-frontend
 npm install
 npm run dev
-# Runs on http://localhost:5173
+```
+Create `backend/.env` (never commit it):
+```
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+DATABASE_URL=            # empty = local SQLite
+SECRET_KEY=              # long random string
 ```
 
-### AWS Credentials (optional)
-Add to `backend/.env` to connect real CloudWatch data:
+## Limitations 
+- **The model is trained on synthetic data.** No real labelled dataset of Lambda right-sizing outcomes exists. The reported accuracy (R2 about 0.999) shows the model learns the generating rule; it is not a measure of real-world savings.
+- The 6-month savings chart on the dashboard is **sample data** for illustration. Savings are reported as 0 until optimizations are applied.
+- The system recommends changes; it does not yet apply them to AWS automatically (autonomous execution is Phase 2).
+- The test AWS account runs only a few small Lambda functions, so real costs are near PKR 0.
+- The AWS Free plan used for testing expires around April 2027.
 
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-AWS_REGION=us-east-1
-
-Without credentials, the system uses realistic mock data automatically.
-
----
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/auth/register | Register new user |
-| POST | /api/auth/login | Login, returns JWT |
-| GET | /api/dashboard/summary | Cost summary + trend |
-| GET | /api/resources/functions | All Lambda functions |
-| GET | /api/optimization/model-info | XGBoost model stats |
-| GET | /api/optimization/recommendations | AI recommendations |
-| POST | /api/optimization/retrain | Retrain XGBoost model |
-| GET | /api/reports/savings | Monthly savings report |
-| GET | /api/reports/cost-breakdown | Cost per function |
-| GET | /api/notifications/ | All notifications |
-
----
-
-## Project Structure
-
-IntelliOptiCloud/
-├── backend/
-│ ├── app/
-│ │ ├── main.py # FastAPI entry point
-│ │ ├── config.py # Settings
-│ │ ├── models/schemas.py # Pydantic models
-│ │ ├── routers/ # API route handlers
-│ │ └── services/ # Business logic
-│ │ ├── auth_service.py
-│ │ ├── cloudwatch_service.py
-│ │ └── optimizer_service.py
-│ └── requirements.txt
-└── intellioptic-frontend/
-└── src/
-├── pages/ # 9 pages
-├── components/ # Sidebar, Topbar, MobileNav
-├── context/ # Auth state
-├── lib/api.js # Backend API calls
-└── data/ # Navigation config
-
-
----
-
-## Cost Savings Demonstrated
-| Metric | Value |
-|--------|-------|
-| Monthly bill before | PKR 50,000 |
-| Monthly bill after | PKR 18,000 |
-| Total saved | PKR 32,000 |
-| Savings percentage | 64% |
-| Target users | 5,000+ |
-| Projected Year-1 revenue | PKR 3 crore |
-
----
-
-## Phase 2 Roadmap
-- Real AWS Lambda configuration updates via API
-- PostgreSQL database replacing in-memory user store
-- Google Colab model retraining pipeline
-- Multi-region support
-- Email notification delivery
-
----
-
-*IntelliOptiCloud Free Tier — FYP Phase 1 | January 2026*
