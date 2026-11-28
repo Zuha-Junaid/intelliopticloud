@@ -1114,3 +1114,16 @@ def test_TC_R02_window_closed_by_a_later_change_is_explained(aws):
     items = savings_service.verified_savings()["items"]
     first = next(i for i in items if i["newValue"] == "512")
     assert first["status"] == "waiting" and "later change" in first["message"]
+
+
+def test_TC_R03_recommendations_expose_measured_peak_memory(aws):
+    recs = {r["function"]: r for r in cycle_service.build_recommendations(cw.get_functions())}
+    assert recs["ioc-demo-api"]["peak"] == 90 and recs["ioc-demo-api"]["measured"] is True
+    assert recs["ioc-demo-go"]["peak"] is None and recs["ioc-demo-go"]["measured"] is False
+
+
+def test_TC_R04_manual_memory_experiment_can_be_applied_and_is_judged(aws):
+    out = _apply_and_events(aws, 256)                            # a size the model did not recommend
+    assert out["new"] == 256 and aws.fns["ioc-demo-api"]["MemorySize"] == 256
+    item = savings_service.verified_savings()["items"][0]
+    assert item["status"] == "verified" and item["changePct"] < 0

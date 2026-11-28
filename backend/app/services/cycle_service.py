@@ -30,6 +30,7 @@ def build_recommendations(functions: list) -> list:
             "runtime": fn["runtime"],
             "architecture": fn["architecture"],
             "measured": fn.get("maxMemoryUsed") is not None,
+            "peak": fn.get("maxMemoryUsed"),
             "memory": predict_memory(fn["memory"], fn["invocations"], fn["avgDuration"], fn.get("maxMemoryUsed")),
             "spot": recommend_spot(fn["invocations"], fn["avgDuration"]),
             "arch": recommend_architecture(fn["runtime"], fn["architecture"], fn["invocations"]),
