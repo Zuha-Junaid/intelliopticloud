@@ -21,7 +21,7 @@ IntelliOptiCloud monitors AWS Lambda functions through CloudWatch (metrics and l
 | Backend | FastAPI, Uvicorn, JWT auth (bcrypt + python-jose) | Render |
 | Database | PostgreSQL (SQLAlchemy); SQLite locally | Neon |
 | Monitoring data | CloudWatch metrics and Lambda `REPORT` log lines via boto3 | AWS Free plan |
-| ML | XGBoost regression for memory right-sizing, trained on measured Lambda runs | trained locally from `backend/benchmark/real_benchmark.csv` |
+| ML | XGBoost regression for memory right-sizing, trained on 96 measured Lambda workloads | trained locally from `backend/benchmark/real_benchmark.csv` |
 | Scheduler | GitHub Actions (`.github/workflows/monitor.yml`), every 15 minutes | GitHub |
 | Source control | Git and GitHub | GitHub |
 
@@ -61,18 +61,28 @@ tools/                   scripts that run in AWS CloudShell or train the model (
 
 **Verified saving.** `ioc-demo-api` was moved from x86_64 to arm64 by the system. Measured from 150 invocations before and 150 after: cost per invocation 0.000908 PKR to 0.000737 PKR, **18.8% lower** (the list-price difference is 20%). The monthly amount in PKR is very small because the demo function has little traffic; the percentage is the meaningful number.
 
-**Model** (`backend/benchmark/training_report.json`, 36 measured workloads x up to 6 memory sizes = 156 measurements, version v3.1):
+**Model** (`backend/benchmark/training_report.json`, version v3.1): trained on **96 measured workloads** (36 base + 60 extra, each at up to 6 memory sizes = 422 measurements) from AWS Lambda.
 
 | Measure | Result |
 |---|---|
-| Held-out split (10 workloads): exact size / within one step | 50.0% / 100% |
+| Held-out split (28 unseen workloads): exact size / within one step | 45.7% / 92.1% |
 | Unsafe predictions (below the minimum safe size) | 0 |
-| Cross-validation (6 folds x 3 repeats, grouped by workload): exact / within one step | 59.8% / 90.0% |
-| Memory-reducing recommendations that cut cost by more than 2% | 96.6% |
-| ... of which made the function more than 25% slower | 22.4% |
-| Mean cost change of those recommendations | -25.5% |
+| Cross-validation (6 folds x 3 repeats, grouped by workload): exact / within one step | 58.8% / 87.4% |
+| Memory-reducing recommendations that cut cost by more than 2% | 97.8% |
+| ... of which made the function more than 25% slower | 25.0% |
+| Mean cost change of those recommendations | -32.3% |
 
-How to read this: the model is clearly better than the naive "shrink to the minimum safe size" rule (84.4% cut cost but 82.3% became more than 25% slower). It is **not** clearly better than the trivial rule "use 2048 MB", because most benchmark labels are 2048 MB and one observation of a function cannot tell CPU-bound code from waiting-bound code. That is why the guard exists: a wrong recommendation is measured and can be rolled back.
+Comparison with two trivial rules, on the same cross-validation:
+
+| Rule | Cut cost | More than 25% slower | Mean cost change |
+|---|---|---|---|
+| Model | 97.8% | 25.0% | -32.3% |
+| Shrink to the minimum safe size | 82.8% | 81.4% | -35.5% |
+| Always 2048 MB (never below the safe size) | 98.8% | 9.3% | -28.9% |
+
+How to read this: the model is far better than the naive "shrink to the minimum safe size" rule, which makes four out of five functions much slower. Against "always 2048 MB" the model finds more savings (-32.3% instead of -28.9%, on 104 instead of 86 scored recommendations) but slows a function down more often (25.0% instead of 9.3%). One observation of a function (memory, duration, peak memory) cannot tell CPU-bound code from waiting-bound code, so a better model needs more information, not more of the same data. That is why the guard exists: a wrong recommendation is measured and can be rolled back. A variant that rounds predictions up to the next size was also tested: it lowered the slow-down rate to 17.1% but halved the number of recommendations, so it was not adopted.
+
+Data quality note: Lambda reports "Max Memory Used" as the highest value of a whole reused execution environment. The benchmark therefore runs small workloads first and training uses the lowest peak measured for each workload. An earlier extra run in random order had inflated peaks (45 of 60 workloads) and gave 41.7% accuracy and 22 unsafe predictions; it was discarded and re-measured.
 
 The earlier figure of 99.7% accuracy belonged to a model trained on synthetic data and only showed that the model had learned the rule used to create that data. It is not used any more.
 
@@ -140,7 +150,7 @@ All AWS steps run in **AWS CloudShell** (the `>_` icon in the AWS console, regio
 
 ## Limitations
 - The model sees **one observation** of a function (memory, duration, peak memory), so it cannot tell CPU-bound from waiting-bound code. `training_report.json` therefore reports a workload-grouped cross-validation and compares the model with two trivial baselines; the guard above limits the cost of a wrong prediction.
-- Training data are **measured benchmark workloads** (memory held x CPU work x waiting time) run on real AWS Lambda, not the production functions of real customers. The accuracy figures measure how well the model generalises to unseen workloads of this benchmark; the test set is small (10 workloads).
+- Training data are **measured benchmark workloads** (memory held x CPU work x waiting time) run on real AWS Lambda, not the production functions of real customers. The accuracy figures measure how well the model generalises to unseen workloads of this benchmark; the test set is small (28 workloads).
 - AWS Lambda has **no spot market**. The "spot" score is advisory only; the applicable cheaper option is Graviton (arm64).
 - Costs are **list-price estimates**. The AWS Free plan means the test account is not billed for them. The verified saving is measured on a demo function with little traffic.
 - Applying changes is limited to `ioc-demo-*` functions and to the six memory sizes 128, 256, 512, 1024, 2048 and 3008 MB. Container-image functions are not switched to arm64.
