@@ -6,16 +6,43 @@
     "Peak Memory Used MB",
     "Memory Utilization %"
   ],
-  "version": "v3.0",
+  "version": "v3.1",
   "trainedOn": "Measured AWS Lambda benchmark (36 workloads x 6 memory sizes)",
-  "accuracy": 45.7,
+  "accuracy": 50.0,
   "metrics_held_out": {
     "samples": 46,
-    "exact_accuracy_pct": 45.7,
-    "within_one_step_pct": 97.8,
-    "mean_cost_regret_pct": 22.3,
+    "exact_accuracy_pct": 50.0,
+    "within_one_step_pct": 100.0,
+    "mean_cost_regret_pct": 19.2,
     "unsafe_predictions": 0,
-    "mae_mb": 559.3
+    "mae_mb": 496.7
+  },
+  "cross_validation": {
+    "folds": 6,
+    "repeats": 3,
+    "exact_accuracy_pct": 59.8,
+    "within_one_step_pct": 90.0,
+    "model": {
+      "downsizes_scored": 29.7,
+      "cut_cost_pct": 96.6,
+      "slower_than_25pct_pct": 22.4,
+      "mean_cost_change_pct": -25.5,
+      "median_duration_change_pct": 13.2
+    },
+    "baseline_min_safe_size": {
+      "downsizes_scored": 96.0,
+      "cut_cost_pct": 84.4,
+      "slower_than_25pct_pct": 82.3,
+      "mean_cost_change_pct": -32.1,
+      "median_duration_change_pct": 151.6
+    },
+    "baseline_always_2048": {
+      "downsizes_scored": 30.0,
+      "cut_cost_pct": 96.7,
+      "slower_than_25pct_pct": 20.0,
+      "mean_cost_change_pct": -22.6,
+      "median_duration_change_pct": 12.9
+    }
   },
   "train_workloads": 26,
   "test_workloads": 10,
@@ -116,7 +143,7 @@
       "memory_mb": 128,
       "peak_mb": 92.0,
       "label": 1024,
-      "predicted": 3008
+      "predicted": 2048
     },
     {
       "profile": "a60_c0m_s200",
@@ -165,14 +192,14 @@
       "memory_mb": 256,
       "peak_mb": 92.0,
       "label": 2048,
-      "predicted": 3008
+      "predicted": 2048
     },
     {
       "profile": "a60_c1m_s0",
       "memory_mb": 512,
       "peak_mb": 92.0,
       "label": 2048,
-      "predicted": 3008
+      "predicted": 2048
     },
     {
       "profile": "a60_c1m_s0",
@@ -312,7 +339,7 @@
       "memory_mb": 3008,
       "peak_mb": 934.0,
       "label": 3008,
-      "predicted": 3008
+      "predicted": 2048
     },
     {
       "profile": "a900_c5m_s200",
@@ -333,7 +360,7 @@
       "memory_mb": 3008,
       "peak_mb": 934.0,
       "label": 2048,
-      "predicted": 3008
+      "predicted": 2048
     },
     {
       "profile": "a1700_c0m_s200",

@@ -192,10 +192,10 @@ def test_TC_D04_cost_formula():
 
 
 # ---------------- TC-E: optimisation ----------------
-def test_TC_E01_model_info_uses_colab_model(client, token):
+def test_TC_E01_model_info_uses_shipped_model(client, token):
     b = client.get("/api/optimization/model-info", headers=H(token)).json()
-    assert b["algorithm"] == "XGBoost Regressor" and b["accuracy"] == 99.7
-    assert opt.get_model_source() == "colab"
+    assert b["algorithm"] == "XGBoost Regressor" and 0 < b["accuracy"] <= 100
+    assert opt.get_model_source() in ("benchmark", "colab")      # whichever model file the project ships
 
 
 def test_TC_E02_recommendations_cover_all_functions(client, token):
@@ -278,7 +278,7 @@ def test_TC_G02_spot_boundaries(inv, dur, score):
 
 @pytest.mark.parametrize("mem", SIZES)
 def test_TC_G03_memory_prediction_valid_size(mem):
-    r = opt.predict_memory(mem, 100000, 500.0)
+    r = opt.predict_memory(mem, 100000, 500.0, max_used=20)
     assert r["current"] == mem and r["optimal"] in SIZES
     assert r["saves"] == (r["optimal"] < mem)
     assert 50.0 <= r["confidence"] <= 100.0
@@ -293,6 +293,7 @@ def test_TC_G04_snap_to_nearest_size():
 
 def test_TC_G05_fallback_training_path(monkeypatch, tmp_path):
     monkeypatch.setattr(opt, "MODEL_FILE", tmp_path / "missing.json")
+    monkeypatch.setattr(opt, "TRAINING_CSV", tmp_path / "no_benchmark.csv")   # no real benchmark -> synthetic fallback
     monkeypatch.setattr(opt, "_model", None)
     m = opt.get_model()
     assert m is not None and opt.get_model_source() == "trained-at-startup"
@@ -302,6 +303,7 @@ def test_TC_G06_corrupt_model_file_falls_back(monkeypatch, tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text("not a model")
     monkeypatch.setattr(opt, "MODEL_FILE", bad)
+    monkeypatch.setattr(opt, "TRAINING_CSV", tmp_path / "no_benchmark.csv")
     monkeypatch.setattr(opt, "_model", None)
     assert opt.get_model() is not None and opt.get_model_source() == "trained-at-startup"
 
@@ -492,6 +494,7 @@ def aws(client, monkeypatch):
         conn.execute(delete(actions_t))           # every test starts without earlier changes
     store.kv_set("settings", {})  # defaults: autonomy "approve", min confidence 85
     store.kv_set("last_cycle", None)
+    store.kv_set("guard_done", [])
     cw.clear_cache()
     fake.add("ioc-demo-api", int(time.time() * 1000) - 3_600_000, 30, 200.0, 200, 1024, 90)
     return fake
@@ -635,15 +638,19 @@ def test_TC_L03_sample_data_is_never_stored_as_history(client, token):
     assert out["source"] == "sample" and len(cycle_service.history()) == before
 
 
-def test_TC_L04_auto_mode_applies_only_safe_changes(aws):
+def test_TC_L04_auto_mode_applies_only_safe_changes(aws, monkeypatch):
+    fixed = {"current": 1024, "optimal": 256, "confidence": 90.0, "saves": True, "reduction_pct": 75.0, "basis": "x"}
+    monkeypatch.setattr(cycle_service, "predict_memory", lambda *a, **k: fixed)   # independent of the shipped model
     store.update_settings({"autonomy": "auto", "min_confidence": 50})
     out = cycle_service.run_cycle()
-    assert out["applied"] == 1 and aws.calls == [("memory", "ioc-demo-api", aws.fns["ioc-demo-api"]["MemorySize"])]
+    assert out["applied"] == 1 and aws.calls == [("memory", "ioc-demo-api", 256)]
     assert aws.fns["other-fn"]["MemorySize"] == 1024            # not an allowed function name
-    assert aws.fns["ioc-demo-api"]["MemorySize"] < 1024
+    assert aws.fns["ioc-demo-api"]["MemorySize"] == 256
 
 
-def test_TC_L05_approve_mode_applies_nothing(aws):
+def test_TC_L05_approve_mode_applies_nothing(aws, monkeypatch):
+    fixed = {"current": 1024, "optimal": 256, "confidence": 90.0, "saves": True, "reduction_pct": 75.0, "basis": "x"}
+    monkeypatch.setattr(cycle_service, "predict_memory", lambda *a, **k: fixed)
     store.update_settings({"autonomy": "approve", "min_confidence": 50})
     out = cycle_service.run_cycle()
     assert out["applied"] == 0 and aws.calls == [] and out["recommendations"] >= 1
@@ -982,3 +989,104 @@ def test_TC_K14_memory_change_refused_without_measured_usage(aws):
     with pytest.raises(apply_service.ApplyError) as e:        # ioc-demo-go has no log events yet
         apply_service.apply_memory("ioc-demo-go", 256)
     assert e.value.status_code == 400 and "no measured peak memory" in e.value.message and aws.calls == []
+
+
+# ---------------- TC-Q: closed loop (guard) and cross-validated model report ----------------
+from app.services import guard_service  # noqa: E402
+
+
+def _verified(change_pct, before_ms=200.0, after_ms=200.0):
+    return {"status": "verified", "changePct": change_pct, "avgBilledBeforeMs": before_ms, "avgBilledAfterMs": after_ms}
+
+
+def test_TC_Q01_guard_verdicts():
+    assert guard_service.evaluate({"status": "waiting"})["verdict"] == "waiting"
+    assert guard_service.evaluate(_verified(-30.0))["verdict"] == "ok"
+    assert guard_service.evaluate(_verified(2.0, 200, 240))["verdict"] == "ok"           # small, within tolerance
+    r = guard_service.evaluate(_verified(12.0))
+    assert r["verdict"] == "regression" and "cost" in r["reasons"][0]
+    r = guard_service.evaluate(_verified(-10.0, 200, 300))                               # cheaper but 50% slower
+    assert r["verdict"] == "regression" and "slower" in r["reasons"][0]
+
+
+def _no_new_recommendations(monkeypatch):
+    fixed = {"current": 1024, "optimal": 1024, "confidence": 99.0, "saves": False, "reduction_pct": 0, "basis": "x"}
+    monkeypatch.setattr(cycle_service, "predict_memory", lambda *a, **k: fixed)
+
+
+def test_TC_Q02_auto_mode_rolls_back_a_change_that_made_things_worse(aws, monkeypatch):
+    _no_new_recommendations(monkeypatch)
+    _apply_and_events(aws, 128, billed_after=1600)               # 8x slower at 128 MB
+    store.update_settings({"autonomy": "auto"})
+    out = cycle_service.run_cycle()
+    assert out["guard"]["rolledBack"] == 1 and aws.fns["ioc-demo-api"]["MemorySize"] == 1024
+    assert ("memory", "ioc-demo-api", 1024) in aws.calls
+    assert any(n["title"] == "Automatic rollback: ioc-demo-api" for n in store.list_notifications(50))
+    again = cycle_service.run_cycle()                            # judged once only
+    assert again["guard"]["checked"] == 0 and again["guard"]["rolledBack"] == 0
+
+
+def test_TC_Q03_approve_mode_only_warns(aws, monkeypatch):
+    _no_new_recommendations(monkeypatch)
+    _apply_and_events(aws, 128, billed_after=1600)
+    store.update_settings({"autonomy": "approve"})
+    out = cycle_service.run_cycle()
+    assert out["guard"]["flagged"] == 1 and out["guard"]["rolledBack"] == 0
+    assert aws.fns["ioc-demo-api"]["MemorySize"] == 128
+    assert any(n["title"] == "Change made things worse: ioc-demo-api" for n in store.list_notifications(50))
+
+
+def test_TC_Q04_good_change_is_confirmed_once(aws, monkeypatch):
+    _no_new_recommendations(monkeypatch)
+    _apply_and_events(aws, 256)
+    out = cycle_service.run_cycle()
+    assert out["guard"]["ok"] == 1 and out["guard"]["flagged"] == 0 and aws.fns["ioc-demo-api"]["MemorySize"] == 256
+    assert cycle_service.run_cycle()["guard"]["checked"] == 0
+    titles = [n["title"] for n in store.list_notifications(100)]
+    assert titles.count("Change verified: ioc-demo-api") == 1
+
+
+def test_TC_Q05_change_is_not_judged_before_enough_invocations(aws, monkeypatch):
+    _no_new_recommendations(monkeypatch)
+    _apply_and_events(aws, 128, after_n=5, billed_after=1600)
+    store.update_settings({"autonomy": "auto"})
+    out = cycle_service.run_cycle()
+    assert out["guard"]["checked"] == 0 and aws.fns["ioc-demo-api"]["MemorySize"] == 128
+
+
+def test_TC_Q06_manually_reverted_change_is_not_judged_again(aws, monkeypatch):
+    _no_new_recommendations(monkeypatch)
+    out = _apply_and_events(aws, 128, billed_after=1600)
+    apply_service.rollback(out["id"])
+    store.update_settings({"autonomy": "auto"})
+    res = cycle_service.run_cycle()
+    assert res["guard"]["flagged"] == 0 and res["guard"]["rolledBack"] == 0
+
+
+def test_TC_Q07_rollback_failure_is_reported_not_raised(aws, monkeypatch):
+    _no_new_recommendations(monkeypatch)
+    _apply_and_events(aws, 128, billed_after=1600)
+    store.update_settings({"autonomy": "auto"})
+    aws.fail_update = True
+    out = cycle_service.run_cycle()
+    assert out["guard"]["flagged"] == 1 and out["guard"]["rolledBack"] == 0
+    assert any("automatic rollback failed" in n["desc"] for n in store.list_notifications(50))
+
+
+def test_TC_Q08_guard_errors_never_stop_the_cycle(aws, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("x")
+    monkeypatch.setattr(cycle_service, "check_recent_changes", boom)
+    out = cycle_service.run_cycle()
+    assert out["functions"] >= 1 and any(e.startswith("guard:") for e in out["errors"])
+
+
+def test_TC_Q09_model_report_contains_cross_validation_and_baselines(tmp_path):
+    _write_benchmark(tmp_path / "b.csv")
+    meta = training.train_from_csv(tmp_path / "b.csv", tmp_path / "m.json", tmp_path / "meta.json")
+    cv = meta["cross_validation"]
+    assert cv["folds"] >= 2 and 0 <= cv["exact_accuracy_pct"] <= 100
+    for key in ("model", "baseline_min_safe_size", "baseline_always_2048"):
+        assert key in cv
+    assert training.min_safe_size(900) == 2048 and training.min_safe_size(10) == 128
+    assert training.min_safe_size(5000) == 3008

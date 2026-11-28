@@ -84,13 +84,86 @@ def build_dataset(rows):
 
 
 def _fit(X, y, seed):
-    m = XGBRegressor(n_estimators=100, max_depth=4, learning_rate=0.1, random_state=seed, n_jobs=1)
+    # Shallow trees: with a few dozen workloads, deep trees memorise single workloads. The depth was
+    # chosen by workload-grouped cross-validation (see cross_validate), not on the held-out split.
+    m = XGBRegressor(n_estimators=60, max_depth=2, learning_rate=0.1, random_state=seed, n_jobs=1)
     m.fit(X, y)
     return m
 
 
+def min_safe_size(max_used) -> int:
+    """Smallest size that keeps the headroom above the measured peak memory."""
+    need = float(max_used) * HEADROOM
+    return next((s for s in SIZES if s >= need), SIZES[-1])
+
+
+def _clamp_safe(pred, X) -> np.ndarray:
+    """What the deployed backend does: never go below the minimum safe size."""
+    return np.array([max(int(p), min_safe_size(x[2])) for p, x in zip(pred, X)])
+
+
+def _downsize_outcome(pred, src, groups) -> dict:
+    """Judges only the recommendations the app can act on: those that LOWER the memory.
+    Each is scored against what was measured for that workload at the recommended size."""
+    n = cut = slow = 0
+    cost, dur = [], []
+    for p, r in zip(pred, src):
+        if int(p) >= r["memory_mb"]:
+            continue
+        at_p = next((x for x in groups[r["profile"]] if x["memory_mb"] == int(p)), None)
+        if at_p is None:
+            continue  # that size was not measured for this workload
+        n += 1
+        c = cost_units(at_p) / cost_units(r) - 1.0
+        d = at_p["duration_ms"] / r["duration_ms"] - 1.0
+        cost.append(c)
+        dur.append(d)
+        cut += c < -0.02
+        slow += d > LATENCY_TOLERANCE - 1.0
+    if n == 0:
+        return {"downsizes_scored": 0}
+    return {"downsizes_scored": n,
+            "cut_cost_pct": round(cut / n * 100, 1),
+            "slower_than_25pct_pct": round(slow / n * 100, 1),
+            "mean_cost_change_pct": round(float(np.mean(cost)) * 100, 1),
+            "median_duration_change_pct": round(float(np.median(dur)) * 100, 1)}
+
+
+def cross_validate(X, y, prof, src, groups, seed: int = 42, k: int = 6, reps: int = 3) -> dict:
+    """Repeated k-fold cross-validation grouped by WORKLOAD (all sizes of a workload stay together),
+    so every workload is predicted by a model that never saw it. Much steadier than one small
+    held-out split. The model is compared with two trivial baselines."""
+    profiles = sorted(set(prof))
+    prof_arr = np.array(prof)
+    k = max(2, min(k, len(profiles)))
+    idx = {s: i for i, s in enumerate(SIZES)}
+    methods = {"model": [], "baseline_min_safe_size": [], "baseline_always_2048": []}
+    exact, within1 = [], []
+    for rep in range(reps):
+        rng = np.random.default_rng(seed + rep)
+        folds = np.array_split(rng.permutation(profiles), k)
+        pred = {m: np.zeros(len(y)) for m in methods}
+        for fold in folds:
+            te = np.isin(prof_arr, fold)
+            model = _fit(X[~te], y[~te], seed)
+            pred["model"][te] = _clamp_safe(snap(model.predict(X[te])), X[te])
+            pred["baseline_min_safe_size"][te] = [min_safe_size(x[2]) for x in X[te]]
+            pred["baseline_always_2048"][te] = _clamp_safe(np.full(int(te.sum()), 2048), X[te])
+        exact.append(float(np.mean(pred["model"] == y)) * 100)
+        within1.append(float(np.mean([abs(idx[int(a)] - idx[int(b)]) <= 1 for a, b in zip(pred["model"], y)])) * 100)
+        for m in methods:
+            methods[m].append(_downsize_outcome(pred[m], src, groups))
+    out = {"folds": k, "repeats": reps, "exact_accuracy_pct": round(float(np.mean(exact)), 1),
+           "within_one_step_pct": round(float(np.mean(within1)), 1)}
+    for m, runs in methods.items():
+        runs = [r for r in runs if r.get("downsizes_scored")]
+        out[m] = ({key: round(float(np.mean([r[key] for r in runs])), 1) for key in runs[0]} if runs
+                  else {"downsizes_scored": 0})
+    return out
+
+
 def evaluate(model, X, y, src, groups) -> dict:
-    pred = snap(model.predict(X))
+    pred = _clamp_safe(snap(model.predict(X)), X)  # as deployed: never below the minimum safe size
     exact = float(np.mean(pred == y)) * 100
     idx = {s: i for i, s in enumerate(SIZES)}
     within1 = float(np.mean([abs(idx[int(p)] - idx[int(t)]) <= 1 for p, t in zip(pred, y)])) * 100
@@ -125,19 +198,21 @@ def train_from_csv(csv_path, model_path, meta_path, seed: int = 42, test_fractio
     held_out = _fit(X[~is_test], y[~is_test], seed)
     test_src = [s for s, t in zip(src, is_test) if t]
     metrics = evaluate(held_out, X[is_test], y[is_test], test_src, groups)
-    test_pred = snap(held_out.predict(X[is_test]))
+    test_pred = _clamp_safe(snap(held_out.predict(X[is_test])), X[is_test])
     detail = [{"profile": r["profile"], "memory_mb": r["memory_mb"], "peak_mb": r["max_used_mb"],
                "label": int(t), "predicted": int(p)} for r, t, p in zip(test_src, y[is_test], test_pred)]
+    cv = cross_validate(X, y, prof, src, groups, seed=seed)
     final = _fit(X, y, seed)  # deployed model uses all workloads
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     final.save_model(str(model_path))
     meta = {
         "feature_set": FEATURE_SET,
         "features": FEATURES,
-        "version": "v3.0",
+        "version": "v3.1",
         "trainedOn": f"Measured AWS Lambda benchmark ({len(profiles)} workloads x {len(SIZES)} memory sizes)",
         "accuracy": metrics["exact_accuracy_pct"],
         "metrics_held_out": metrics,
+        "cross_validation": cv,
         "train_workloads": len(profiles) - len(test_profiles),
         "test_workloads": len(test_profiles),
         "rows": len(rows),

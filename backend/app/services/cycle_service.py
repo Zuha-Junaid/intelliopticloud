@@ -1,5 +1,6 @@
 """One monitoring cycle: read AWS, store a history snapshot, produce recommendations and
-notifications and, only when the autonomy level is 'auto', apply safe memory changes."""
+notifications, check earlier changes against measured results and, only when the autonomy
+level is 'auto', apply safe memory changes (and roll back those that made things worse)."""
 import time
 import uuid
 from datetime import timedelta
@@ -11,6 +12,7 @@ from app.database import engine, snapshots
 from app.services import store
 from app.services.apply_service import ApplyError, apply_memory
 from app.services.cloudwatch_service import get_inventory
+from app.services.guard_service import check_recent_changes
 from app.services.optimizer_service import (
     predict_memory, recommend_architecture, recommend_spot,
 )
@@ -51,7 +53,8 @@ def run_cycle(trigger: str = "manual") -> dict:
     now = store.utcnow()
     summary = {"at": now.isoformat() + "Z", "trigger": trigger, "source": inv["source"], "warning": inv["warning"],
                "functions": len(fns), "measured": sum(1 for f in fns if f.get("maxMemoryUsed") is not None),
-               "recommendations": 0, "applied": 0, "skipped": 0, "errors": []}
+               "recommendations": 0, "applied": 0, "skipped": 0, "errors": [],
+               "guard": {"checked": 0, "ok": 0, "flagged": 0, "rolledBack": 0}}
 
     # 1. spike alerts (compare with the previous snapshot BEFORE storing the new one)
     if cfg["notify_alerts"] and inv["source"] == "aws":
@@ -96,7 +99,14 @@ def run_cycle(trigger: str = "manual") -> dict:
             else:
                 summary["skipped"] += 1
 
-    # 4. weekly summary
+    # 4. closed loop: judge earlier changes by their measured cost and speed (rolls back only in 'auto')
+    if inv["source"] == "aws":
+        try:
+            summary["guard"] = check_recent_changes(fns, cfg["autonomy"])
+        except Exception as exc:  # the guard must never stop the monitoring cycle
+            summary["errors"].append(f"guard: {type(exc).__name__}")
+
+    # 5. weekly summary
     if cfg["notify_summary"] and inv["source"] == "aws":
         total = round(sum(f["monthlyCost"] for f in fns), 2)
         store.notify("system", "Weekly summary",

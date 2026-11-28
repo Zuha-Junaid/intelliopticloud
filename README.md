@@ -31,6 +31,7 @@ AI-driven AWS Lambda cost optimization for Pakistani startups and SMEs. It monit
 - **Decide:** memory right-sizing, Graviton (arm64) switch (20% lower price per GB-second) and an advisory "spot suitability" score (AWS Lambda has no spot market).
 - **Apply (optional, off by default):** `APPLY_ENABLED=true` on the server, limited to functions named `ioc-demo-*`, three autonomy levels (monitor only / approve / automatic), headroom check, change log and rollback.
 - **Verify:** billed cost per invocation before and after each change, from CloudWatch Logs, needs at least 20 invocations on each side.
+- **Guard (closed loop):** once a change has enough new invocations, its measured cost and duration are judged (cost per invocation must not rise more than 5%, duration not more than 25%). A change that fails is reported; only in the *automatic* level it is rolled back by the system.
 - **Notify:** recommendations, usage increases, applied changes and a weekly summary, filtered by the user's preferences.
 - **History:** one snapshot per function per monitoring cycle in the database.
 
@@ -84,6 +85,7 @@ The tests use a throw-away database and no AWS credentials, whatever is in `.env
 5. **Verify a saving:** `python3 generate_load.py --function ioc-demo-api --count 150` in CloudShell, then in the app press Apply on `ioc-demo-api`, run the load again, and open Reports.
 
 ## Limitations
+- The model sees **one observation** of a function (memory, duration, peak memory), so it cannot tell CPU-bound from waiting-bound code. `training_report.json` therefore reports a workload-grouped cross-validation and compares the model with two trivial baselines; the guard above limits the cost of a wrong prediction.
 - Training data are **measured benchmark workloads** (memory held x CPU work x waiting time) run on real AWS Lambda, not the production functions of real customers. The held-out accuracy in `training_report.json` measures how well the model generalises to unseen workloads of this benchmark.
 - Costs are **list-price estimates**. The AWS Free plan means the test account is not billed for them.
 - Applying changes is limited to `ioc-demo-*` functions and to the six memory sizes 128, 256, 512, 1024, 2048 and 3008 MB.

@@ -10,3 +10,16 @@ os.environ["AWS_ACCESS_KEY_ID"] = ""
 os.environ["AWS_SECRET_ACCESS_KEY"] = ""
 os.environ["APPLY_ENABLED"] = "false"
 os.environ["CRON_TOKEN"] = ""
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _restore_model_state():
+    """Tests that retrain or replace the model must not leak into later tests."""
+    from app.services import optimizer_service as opt
+    saved = {n: getattr(opt, n) for n in ("_model", "_meta", "_source", "_accuracy")}
+    yield
+    for n, v in saved.items():
+        setattr(opt, n, v)
