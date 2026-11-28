@@ -132,6 +132,10 @@ def predict_memory(memory: int, invocations: int, duration: float, max_used=None
     if max_used is not None:
         optimal = max(optimal, _min_safe_size(max_used))  # never recommend a size that cannot hold the function
     confidence = round(max(50.0, 100 - abs(predicted - optimal) / optimal * 100), 1)
+    if optimal > memory and memory in SIZES and (max_used is None or memory >= _min_safe_size(max_used)):
+        # The model may prefer a larger size for speed. This is a COST optimiser, so a larger size is
+        # only ever shown when the current size is too small for the measured peak memory.
+        optimal = int(memory)
     return {
         "current": int(memory),
         "optimal": optimal,

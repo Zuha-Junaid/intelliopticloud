@@ -50,8 +50,11 @@ def verify(action: dict, monthly_invocations: int) -> dict:
             "newValue": action["new_value"], "takenAt": t.isoformat() + "Z", "mode": action["mode"],
             "eventsBefore": len(before), "eventsAfter": len(after)}
     if len(before) < MIN_EVENTS or len(after) < MIN_EVENTS:
-        return {**base, "status": "waiting",
-                "message": f"Needs at least {MIN_EVENTS} invocations before and after the change."}
+        message = f"Needs at least {MIN_EVENTS} invocations before and after the change."
+        if next_t is not None and len(after) < MIN_EVENTS:
+            message = (f"A later change on this function closed the measuring window with fewer than {MIN_EVENTS} "
+                       "invocations after this change. Run load before making the next change.")
+        return {**base, "status": "waiting", "message": message}
     arch_before = action["old_value"] if action["kind"] == "architecture" else action["arch_at_action"]
     arch_after = action["new_value"] if action["kind"] == "architecture" else action["arch_at_action"]
     c_before, c_after = _mean_cost(before, arch_before), _mean_cost(after, arch_after)

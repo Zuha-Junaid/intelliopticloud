@@ -1090,3 +1090,27 @@ def test_TC_Q09_model_report_contains_cross_validation_and_baselines(tmp_path):
         assert key in cv
     assert training.min_safe_size(900) == 2048 and training.min_safe_size(10) == 128
     assert training.min_safe_size(5000) == 3008
+
+
+def test_TC_R01_cost_optimiser_never_recommends_a_larger_size_that_is_not_needed(tmp_path, monkeypatch):
+    class Big:                                  # a model that always prefers 2048 MB
+        def predict(self, X):
+            return [2048.0]
+    monkeypatch.setattr(opt, "_model", Big())
+    monkeypatch.setattr(opt, "_meta", {"feature_set": training.FEATURE_SET})
+    r = opt.predict_memory(1024, 5000, 180.0, max_used=32)
+    assert r["optimal"] == 1024 and r["saves"] is False and r["reduction_pct"] == 0
+    r = opt.predict_memory(128, 5000, 180.0, max_used=120)      # 120 MB * 1.25 = 150 MB: 128 MB is too small
+    assert r["optimal"] > 128 and r["saves"] is False            # a larger size IS shown when the safety needs it
+
+
+def test_TC_R02_window_closed_by_a_later_change_is_explained(aws):
+    now = int(time.time() * 1000)
+    aws.events["ioc-demo-api"] = []
+    aws.add("ioc-demo-api", now - 3_600_000, 30, 200.0, 200, 1024, 90)
+    apply_service.apply_memory("ioc-demo-api", 512)
+    time.sleep(0.05)
+    apply_service.apply_memory("ioc-demo-api", 256)             # second change before any load after the first
+    items = savings_service.verified_savings()["items"]
+    first = next(i for i in items if i["newValue"] == "512")
+    assert first["status"] == "waiting" and "later change" in first["message"]
