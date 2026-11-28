@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink } from 'react-router-dom'
-import { Menu, X, Cloud, Activity } from 'lucide-react'
+import { Menu, X, Cloud } from 'lucide-react'
 import { navItems } from '../../data/navigation'
+import EngineStatus from './EngineStatus'
  
 export default function MobileNav() {
   const [open, setOpen] = useState(false)
@@ -68,7 +69,7 @@ export default function MobileNav() {
               <p style={{ fontSize: 13, fontWeight: 600, color: '#e8eaee', lineHeight: 1.3, margin: 0 }}>
                 IntelliOptiCloud
               </p>
-              <p style={{ fontSize: 11, color: '#4a505c', margin: 0 }}>Free Tier v1.7</p>
+              <p style={{ fontSize: 11, color: '#4a505c', margin: 0 }}>Free Tier v2.0</p>
             </div>
           </div>
           <button
@@ -100,26 +101,8 @@ export default function MobileNav() {
           ))}
         </nav>
  
-        {/* Status footer */}
-        <div
-          style={{
-            background: 'rgba(61,220,151,0.1)',
-            border: '1px solid rgba(61,220,151,0.2)',
-            borderRadius: 12,
-            padding: '10px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            marginTop: 8,
-            flexShrink: 0,
-          }}
-        >
-          <Activity size={14} color="#3ddc97" />
-          <div>
-            <p style={{ fontSize: 12, color: '#3ddc97', fontWeight: 600, margin: 0 }}>Engine Active</p>
-            <p style={{ fontSize: 10, color: '#4a505c', marginTop: 1, marginBottom: 0 }}>Zero downtime · Autonomous</p>
-          </div>
-        </div>
+        {/* Real connection and autonomy status */}
+        <EngineStatus strong />
       </div>
     </div>
   )

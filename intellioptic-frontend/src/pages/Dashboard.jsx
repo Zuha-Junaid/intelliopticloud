@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { TrendingDown, TrendingUp, Zap, Server, RefreshCw } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { dashboardAPI } from '../lib/api'
-
-const fmt = (n) => `PKR ${Number(n).toLocaleString()}`
+import { fmtPKR as fmt, timeAgo } from '../lib/format'
+import SourceBanner from '../components/SourceBanner'
 
 function KPICard({ label, value, sub, icon: Icon, cyan }) {
   return (
@@ -37,22 +37,25 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true); setError('')
     try { setData(await dashboardAPI.getSummary()) }
-    catch { setError('Could not load dashboard. Is the backend running?') }
+    catch { setError('Could not load the dashboard. Is the backend running?') }
     finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [])
 
   const cs = data?.costSummary
-  const trend = data?.savingsTrend || []
   const health = data?.systemHealth
+  const history = (data?.costHistory || []).map(h => ({
+    time: new Date(h.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    cost: h.cost,
+  }))
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-semibold text-titanium-100">Dashboard</h1>
-          <p className="text-xs text-titanium-500 mt-0.5">Real-time AWS cost optimization — autonomous engine running</p>
+          <p className="text-xs text-titanium-500 mt-0.5">Estimated Lambda cost at AWS list prices and savings measured after applied changes</p>
         </div>
         <button onClick={load} className="glass-card flex items-center gap-2 px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100">
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -60,52 +63,48 @@ export default function Dashboard() {
       </div>
 
       {error && <div className="glass-card p-3 border border-danger/20"><p className="text-xs text-danger">{error}</p></div>}
+      {data && <SourceBanner source={data.source} warning={data.warning} />}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {loading ? Array(4).fill(0).map((_, i) => <Skeleton key={i} />) : <>
-          <KPICard label="Monthly Bill" value={fmt(cs?.currentMonthly || 0)} sub={`Was ${fmt(cs?.previousMonthly || 0)}`} icon={TrendingDown} cyan />
-          <KPICard label="Total Saved" value={fmt(cs?.savedAmount || 0)} sub="This month" icon={TrendingUp} />
-          <KPICard label="Savings Rate" value={`${cs?.savingsPercent || 0}%`} sub="vs baseline" icon={Zap} />
-          <KPICard label="Functions" value={health?.functionsMonitored || 0} sub={`Optimized ${health?.lastOptimized}`} icon={Server} />
+          <KPICard label="Estimated Monthly Cost" value={fmt(cs?.currentMonthly)} sub={cs?.savedAmount > 0 ? `Would be ${fmt(cs?.previousMonthly)} without applied changes` : 'Last 30 days of usage, list price'} icon={TrendingDown} cyan />
+          <KPICard label="Verified Savings" value={fmt(cs?.savedAmount)} sub="Per month, measured after applied changes" icon={TrendingUp} />
+          <KPICard label="Savings Rate" value={`${cs?.savingsPercent || 0}%`} sub="Of the cost without changes" icon={Zap} />
+          <KPICard label="Functions Monitored" value={health?.functionsMonitored || 0} sub={`Last change applied: ${timeAgo(health?.lastOptimized)}`} icon={Server} />
         </>}
       </div>
 
       <div className="glass-card p-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-titanium-100">Cost Savings Trend</h2>
-            <p className="text-xs text-titanium-500">Monthly PKR — before vs. after optimization</p>
-          </div>
-          <span className="cyan-badge">↓ {cs?.savingsPercent || 0}% reduction</span>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-titanium-100">Recorded Cost History</h2>
+          <p className="text-xs text-titanium-500">Estimated monthly cost recorded by each monitoring cycle (last 30 days)</p>
         </div>
         {loading
           ? <div className="h-52 bg-white/5 rounded-xl animate-pulse" />
-          : <ResponsiveContainer width="100%" height={200} minWidth={0}>
-              <AreaChart data={trend} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gBefore" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f0594e" stopOpacity={0.15} /><stop offset="95%" stopColor="#f0594e" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gAfter" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4ee3f0" stopOpacity={0.15} /><stop offset="95%" stopColor="#4ee3f0" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="month" tick={{ fill: '#7d8492', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#7d8492', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => `${v/1000}k`} width={34} />
-                <Tooltip content={<Tip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: '#7d8492' }} />
-                <Area type="monotone" dataKey="before" name="Before" stroke="#f0594e" strokeWidth={2} fill="url(#gBefore)" />
-                <Area type="monotone" dataKey="after" name="After" stroke="#4ee3f0" strokeWidth={2} fill="url(#gAfter)" />
-              </AreaChart>
-            </ResponsiveContainer>
+          : history.length < 2
+            ? <div className="h-40 flex items-center justify-center text-center px-4">
+                <p className="text-xs text-titanium-500">
+                  {data?.source === 'aws'
+                    ? 'History builds up as monitoring cycles run. Open Optimization and press Run Cycle Now, or wait for the scheduled job.'
+                    : 'History is stored only for a connected AWS account.'}
+                </p>
+              </div>
+            : <ResponsiveContainer width="100%" height={200} minWidth={0}>
+                <LineChart data={history} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="time" tick={{ fill: '#7d8492', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={30} />
+                  <YAxis tick={{ fill: '#7d8492', fontSize: 10 }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip content={<Tip />} />
+                  <Line type="monotone" dataKey="cost" name="Estimated cost" stroke="#4ee3f0" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
         }
       </div>
 
       {!loading && health && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[['Uptime', health.uptime], ['Actions Today', health.actionsToday],
-            ['Last Optimized', health.lastOptimized], ['Functions Active', health.functionsMonitored]
+          {[['Server Uptime', `${health.serverUptimeHours} h`], ['Changes Applied Today', health.actionsToday],
+            ['Last Change Applied', timeAgo(health.lastOptimized)], ['Last Monitoring Cycle', timeAgo(health.lastCycle)]
           ].map(([label, value]) => (
             <div key={label} className="glass-card p-3 text-center">
               <p className="text-[11px] text-titanium-500 uppercase tracking-wider mb-1">{label}</p>

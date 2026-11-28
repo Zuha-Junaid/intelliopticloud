@@ -1,17 +1,21 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Search, Filter, ArrowUpDown, Download, RefreshCw, ChevronRight } from 'lucide-react'
 import { resourcesAPI } from '../lib/api'
-
-const fmt = (n) => `PKR ${Number(n).toLocaleString()}`
+import { fmtPKR as fmt, downloadCSV } from '../lib/format'
+import SourceBanner from '../components/SourceBanner'
 
 function StatusPill({ status }) {
-  const map = { optimized: 'status-success', analyzing: 'status-warning', pending: 'status-pending' }
-  const labels = { optimized: 'Optimized', analyzing: 'Analyzing', pending: 'Pending' }
+  const map = { active: 'status-success', idle: 'status-pending' }
+  const labels = { active: 'Active', idle: 'Idle (no invocations)' }
   return <span className={map[status] || 'status-pending'}>{labels[status] || status}</span>
 }
 
+const pct = (v) => (v === null || v === undefined ? 'n/a' : `${(v * 100).toFixed(1)}%`)
+const mb = (v) => (v === null || v === undefined ? 'n/a' : `${v} MB`)
+
 export default function Resources() {
   const [fns, setFns] = useState([])
+  const [meta, setMeta] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -21,8 +25,10 @@ export default function Resources() {
 
   const load = async () => {
     setLoading(true); setError('')
-    try { const r = await resourcesAPI.getFunctions(); setFns(r.functions || []) }
-    catch { setError('Failed to load. Is the backend running?') }
+    try {
+      const r = await resourcesAPI.getFunctions()
+      setFns(r.functions || []); setMeta({ source: r.source, warning: r.warning })
+    } catch { setError('Failed to load. Is the backend running?') }
     finally { setLoading(false) }
   }
 
@@ -34,29 +40,36 @@ export default function Resources() {
     return [...r].sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : b[sort] - a[sort])
   }, [fns, query, filter, sort])
 
+  const exportCSV = () => downloadCSV('lambda-functions.csv', rows.map(f => ({
+    function: f.name, runtime: f.runtime, region: f.region, architecture: f.architecture, memory_mb: f.memory,
+    peak_memory_mb: f.maxMemoryUsed ?? '', invocations_30d: f.invocations, avg_duration_ms: f.avgDuration,
+    cold_start_ratio: f.coldStartRatio ?? '', monthly_cost_pkr: f.monthlyCost, status: f.status,
+  })))
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-titanium-100">Resources</h1>
-          <p className="text-xs text-titanium-500 mt-0.5">AWS Lambda usage monitored via CloudWatch APIs</p>
+          <p className="text-xs text-titanium-500 mt-0.5">AWS Lambda usage read from CloudWatch metrics and CloudWatch Logs (last 30 days; log details from the last 7 days)</p>
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="glass-card flex items-center gap-2 px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
-          <button className="glass-card flex items-center gap-2 px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100">
-            <Download size={14} /> Export
+          <button onClick={exportCSV} disabled={!rows.length} className="glass-card flex items-center gap-2 px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100 disabled:opacity-40">
+            <Download size={14} /> Export CSV
           </button>
         </div>
       </div>
 
       {error && <div className="glass-card p-3 border border-danger/20"><p className="text-xs text-danger">{error}</p></div>}
+      <SourceBanner source={meta.source} warning={meta.warning} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="glass-card p-4"><p className="text-[11px] text-titanium-500 uppercase tracking-wider mb-1">Functions</p><p className="text-xl font-bold text-titanium-100">{fns.length}</p></div>
-        <div className="glass-card p-4"><p className="text-[11px] text-titanium-500 uppercase tracking-wider mb-1">Monthly Cost</p><p className="text-xl font-bold text-cyan-glow">{fmt(fns.reduce((s, f) => s + f.monthlyCost, 0))}</p></div>
-        <div className="glass-card p-4"><p className="text-[11px] text-titanium-500 uppercase tracking-wider mb-1">Total Invocations</p><p className="text-xl font-bold text-titanium-100">{fns.reduce((s, f) => s + f.invocations, 0).toLocaleString()}</p></div>
+        <div className="glass-card p-4"><p className="text-[11px] text-titanium-500 uppercase tracking-wider mb-1">Estimated Monthly Cost</p><p className="text-xl font-bold text-cyan-glow">{fmt(fns.reduce((s, f) => s + f.monthlyCost, 0))}</p></div>
+        <div className="glass-card p-4"><p className="text-[11px] text-titanium-500 uppercase tracking-wider mb-1">Invocations (30 days)</p><p className="text-xl font-bold text-titanium-100">{fns.reduce((s, f) => s + f.invocations, 0).toLocaleString()}</p></div>
       </div>
 
       <div className="glass-card p-3 flex flex-wrap gap-3 items-center">
@@ -66,7 +79,7 @@ export default function Resources() {
         </div>
         <div className="flex gap-1.5 overflow-x-auto">
           <Filter size={14} className="text-titanium-700 shrink-0 mt-1" />
-          {['All', 'Optimized', 'Analyzing', 'Pending'].map(f => (
+          {['All', 'Active', 'Idle'].map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`text-xs px-3 py-1.5 rounded-lg border whitespace-nowrap ${filter === f ? 'border-cyan-glow/30 bg-cyan-glow/10 text-cyan-glow' : 'border-white/10 text-titanium-500'}`}>{f}</button>
           ))}
@@ -83,10 +96,10 @@ export default function Resources() {
 
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
+          <table className="w-full text-sm min-w-[760px]">
             <thead>
               <tr className="border-b border-white/8">
-                {['Function', 'Region', 'Memory', 'Invocations', 'Duration', 'Cost/mo', 'Status', ''].map(h => (
+                {['Function', 'Arch', 'Memory (peak used)', 'Invocations', 'Avg duration', 'Cost/mo', 'Status', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-medium text-titanium-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -98,11 +111,11 @@ export default function Resources() {
                 </tr>
               )) : rows.map(fn => (
                 <tr key={fn.id} onClick={() => setSelected(fn)} className="border-b border-white/5 last:border-0 hover:bg-white/4 cursor-pointer transition-colors">
-                  <td className="px-4 py-3"><p className="text-xs font-medium text-titanium-100">{fn.name}</p><p className="text-[11px] text-titanium-700">{fn.runtime}</p></td>
-                  <td className="px-4 py-3 text-xs text-titanium-500">{fn.region}</td>
-                  <td className="px-4 py-3 text-xs"><span className="text-titanium-700 line-through mr-1">{fn.memory}MB</span><span className="text-cyan-glow">{fn.optimized}MB</span></td>
+                  <td className="px-4 py-3"><p className="text-xs font-medium text-titanium-100">{fn.name}</p><p className="text-[11px] text-titanium-700">{fn.runtime} · {fn.region}</p></td>
+                  <td className="px-4 py-3 text-xs text-titanium-500">{fn.architecture}</td>
+                  <td className="px-4 py-3 text-xs text-titanium-300">{fn.memory} MB <span className="text-titanium-700">({mb(fn.maxMemoryUsed)})</span></td>
                   <td className="px-4 py-3 text-xs text-titanium-300">{fn.invocations.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-xs text-titanium-300">{fn.avgDuration}ms</td>
+                  <td className="px-4 py-3 text-xs text-titanium-300">{fn.avgDuration} ms</td>
                   <td className="px-4 py-3 text-xs font-medium text-titanium-100">{fmt(fn.monthlyCost)}</td>
                   <td className="px-4 py-3"><StatusPill status={fn.status} /></td>
                   <td className="px-4 py-3"><ChevronRight size={14} className="text-titanium-700" /></td>
@@ -119,20 +132,19 @@ export default function Resources() {
           <div className="absolute inset-0 bg-black/60" />
           <div onClick={e => e.stopPropagation()} className="relative w-full sm:max-w-md h-full p-5 overflow-y-auto" style={{ background: '#0a0d12', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="flex items-center justify-between mb-5">
-              <div><h2 className="text-sm font-semibold text-titanium-100">{selected.name}</h2><p className="text-[11px] text-titanium-500">{selected.region}</p></div>
+              <div><h2 className="text-sm font-semibold text-titanium-100">{selected.name}</h2><p className="text-[11px] text-titanium-500">{selected.region} · {selected.runtime}</p></div>
               <button onClick={() => setSelected(null)} className="text-xs text-titanium-500 border border-white/10 px-2 py-1 rounded">Close</button>
             </div>
             <div className="grid grid-cols-2 gap-3 mb-4">
-              {[['Monthly Cost', fmt(selected.monthlyCost), true], ['Invocations', selected.invocations.toLocaleString(), false], ['Avg Duration', `${selected.avgDuration}ms`, false], ['Cold Starts', selected.coldStarts, false]].map(([l, v, c]) => (
+              {[['Estimated cost / month', fmt(selected.monthlyCost), true], ['Invocations (30 d)', selected.invocations.toLocaleString(), false],
+                ['Average duration', `${selected.avgDuration} ms`, false], ['Cold starts (7 d)', pct(selected.coldStartRatio), false],
+                ['Configured memory', `${selected.memory} MB`, false], ['Peak memory used', mb(selected.maxMemoryUsed), false],
+                ['Architecture', selected.architecture, false], ['Log samples read', selected.samples, false]].map(([l, v, c]) => (
                 <div key={l} className="glass-card p-3"><p className="text-[11px] text-titanium-500 mb-1">{l}</p><p className={`text-base font-bold ${c ? 'text-cyan-glow' : 'text-titanium-100'}`}>{v}</p></div>
               ))}
             </div>
-            <div className="glass-card p-4 mb-3">
-              <p className="text-xs font-medium text-titanium-100 mb-3">Memory Right-Sizing</p>
-              <div className="flex justify-between text-xs mb-2"><span className="text-titanium-500">Original</span><span className="text-titanium-300">{selected.memory}MB</span></div>
-              <div className="flex justify-between text-xs"><span className="text-titanium-500">AI-Optimized</span><span className="text-cyan-glow font-medium">{selected.optimized}MB</span></div>
-            </div>
-            <div className="glass-card p-4"><p className="text-xs font-medium text-titanium-100 mb-2">Status</p><StatusPill status={selected.status} /><p className="text-[11px] text-titanium-700 mt-2">Last checked {selected.lastChecked}</p></div>
+            <div className="glass-card p-4"><p className="text-xs font-medium text-titanium-100 mb-2">Status</p><StatusPill status={selected.status} />
+              <p className="text-[11px] text-titanium-700 mt-2">Recommendations for this function are on the Optimization page.</p></div>
           </div>
         </div>
       )}

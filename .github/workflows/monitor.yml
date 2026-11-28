@@ -1,0 +1,21 @@
+name: Monitoring cycle
+
+# Calls the backend every 15 minutes. This reads AWS, stores history, creates notifications and,
+# only if the autonomy level is "auto" and APPLY_ENABLED is true on the server, applies safe changes.
+# It also wakes the free Render server so that it does not stay asleep.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run monitoring cycle
+        env:
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+        run: |
+          curl --fail --silent --show-error --max-time 180 --retry 3 --retry-delay 20 --retry-all-errors \
+            -X POST -H "X-Cron-Token: ${CRON_TOKEN}" \
+            https://intelliopticloud.onrender.com/api/system/run-cycle

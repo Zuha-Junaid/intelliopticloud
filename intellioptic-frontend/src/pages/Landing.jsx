@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom'
 import { Cloud, ArrowRight, TrendingDown, Zap, ShieldCheck, BarChart3, Check } from 'lucide-react'
  
 const FEATURES = [
-  { icon: Zap, title: 'Autonomous Optimization', desc: 'Fully automated cost reduction without manual input, running on a continuous 15-minute cycle.' },
-  { icon: TrendingDown, title: 'AI-Based Decision Making', desc: 'XGBoost models trained on Google Colab predict optimal memory and instance configurations.' },
-  { icon: ShieldCheck, title: 'Zero Downtime Execution', desc: 'Every optimization is validated and applied without interrupting your running services.' },
-  { icon: BarChart3, title: 'Real-Time PKR Dashboards', desc: 'Localized cost tracking built specifically for Pakistani startups and SMEs.' },
+  { icon: Zap, title: 'Scheduled Monitoring', desc: 'Every 15 minutes the system reads CloudWatch, stores history and creates notifications. In Automatic mode it also applies safe changes by itself.' },
+  { icon: TrendingDown, title: 'AI-Based Memory Prediction', desc: 'An XGBoost model trained on real AWS Lambda measurements predicts the cheapest memory size that still fits and runs fast.' },
+  { icon: ShieldCheck, title: 'Safe Execution', desc: 'Headroom check over peak memory, allowed-function list, full change log and one-click rollback. Changes need your approval unless you choose Automatic mode.' },
+  { icon: BarChart3, title: 'Measured Savings in PKR', desc: 'Savings are verified from real billed durations before and after each change, shown in Pakistani Rupees.' },
 ]
  
 const COMPETITORS = [
@@ -49,11 +49,11 @@ export default function Landing() {
       <section className="flex-1 flex flex-col items-center justify-center text-center px-4 sm:px-8 py-12 sm:py-16">
         <span className="cyan-badge mb-5 sm:mb-6">Production-Ready AI System</span>
         <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-titanium-100 max-w-3xl leading-tight">
-          Cut your AWS bill by <span className="text-cyan-glow">60–70%</span> fully autonomously
+          Right-size your AWS Lambda functions and <span className="text-cyan-glow">measure the savings</span>
         </h1>
         <p className="text-sm sm:text-base text-titanium-500 max-w-xl mt-5 sm:mt-6 px-2">
-          IntelliOptiCloud monitors your AWS Lambda usage in real time and applies AI-driven
-          cost optimizations with zero downtime, built free, for Pakistani startups and SMEs.
+          IntelliOptiCloud monitors your AWS Lambda usage, recommends the memory size and architecture
+          that cost less, applies them with your approval, and reports the verified saving. Built free for Pakistani startups and SMEs.
         </p>
         <div className="flex flex-col sm:flex-row items-center gap-3 mt-8 w-full sm:w-auto px-4 sm:px-0">
           <Link
@@ -70,19 +70,19 @@ export default function Landing() {
           </Link>
         </div>
  
-        {/* Stat strip */}
+        {/* Facts about the system */}
         <div className="grid grid-cols-3 gap-4 sm:gap-10 mt-12 sm:mt-16 w-full max-w-lg px-4">
           <div>
-            <p className="text-xl sm:text-3xl font-bold text-cyan-glow">64%</p>
-            <p className="text-[10px] sm:text-xs text-titanium-500 mt-1">Avg. Cost Reduction</p>
+            <p className="text-xl sm:text-3xl font-bold text-cyan-glow">15 min</p>
+            <p className="text-[10px] sm:text-xs text-titanium-500 mt-1">Monitoring cycle</p>
           </div>
           <div>
-            <p className="text-xl sm:text-3xl font-bold text-titanium-100">5,000+</p>
-            <p className="text-[10px] sm:text-xs text-titanium-500 mt-1">Target Users</p>
+            <p className="text-xl sm:text-3xl font-bold text-titanium-100">20%</p>
+            <p className="text-[10px] sm:text-xs text-titanium-500 mt-1">Cheaper per GB-second on arm64</p>
           </div>
           <div>
-            <p className="text-xl sm:text-3xl font-bold text-titanium-100">99.98%</p>
-            <p className="text-[10px] sm:text-xs text-titanium-500 mt-1">Uptime</p>
+            <p className="text-xl sm:text-3xl font-bold text-titanium-100">PKR</p>
+            <p className="text-[10px] sm:text-xs text-titanium-500 mt-1">Costs in your currency</p>
           </div>
         </div>
       </section>
@@ -90,10 +90,10 @@ export default function Landing() {
       {/* Features */}
       <section className="px-4 sm:px-8 py-12 sm:py-20 max-w-6xl mx-auto w-full">
         <h2 className="text-xl sm:text-2xl font-semibold text-titanium-100 text-center mb-2">
-          Everything runs on autopilot
+          From monitoring to verified savings
         </h2>
         <p className="text-xs sm:text-sm text-titanium-500 text-center mb-10 sm:mb-12">
-          Built entirely on free-tier infrastructure AWS Free Tier
+          Built entirely on free tools and the AWS Free Tier
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
           {FEATURES.map((f) => (
@@ -122,7 +122,7 @@ export default function Landing() {
           Why not the alternatives?
         </h2>
         <p className="text-xs sm:text-sm text-titanium-500 text-center mb-10">
-          100% autonomous, real-time optimization using only free tools
+          Cost-optimization options compared in the project analysis
         </p>
         <div className="glass-card overflow-hidden">
           {COMPETITORS.map((c, i) => (
@@ -138,7 +138,7 @@ export default function Landing() {
             <p className="text-xs sm:text-sm font-semibold text-cyan-glow flex items-center gap-2">
               <Check size={14} /> IntelliOptiCloud
             </p>
-            <p className="text-[11px] sm:text-xs text-cyan-glow text-right">Free, autonomous, zero setup</p>
+            <p className="text-[11px] sm:text-xs text-cyan-glow text-right">Free, recommends and applies with approval</p>
           </div>
         </div>
       </section>

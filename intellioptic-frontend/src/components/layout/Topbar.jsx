@@ -1,13 +1,26 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, LogOut, ChevronDown } from 'lucide-react'
+import { Bell, LogOut, ChevronDown } from 'lucide-react'
 import MobileNav from './MobileNav'
 import { useAuth } from '../../context/AuthContext'
+import { notificationsAPI } from '../../lib/api'
  
 export default function Topbar() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unread, setUnread] = useState(0)
+
+  // Real unread count, refreshed every minute
+  useEffect(() => {
+    let alive = true
+    const load = () => notificationsAPI.getAll()
+      .then(r => alive && setUnread((r.notifications || []).filter(n => !n.read).length))
+      .catch(() => {})
+    load()
+    const t = setInterval(load, 60000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
  
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -22,40 +35,19 @@ export default function Topbar() {
     <header
       className="glass-topbar sticky top-0 z-20 h-14 flex items-center justify-between px-4 lg:px-6 gap-3"
     >
-      {/* Left: hamburger (mobile) + search */}
+      {/* Left: hamburger (mobile) + title */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <MobileNav />
  
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 10, padding: '7px 12px',
-          }}
-          className="w-full max-w-[260px]"
-        >
-          <Search size={14} color="#4a505c" className="shrink-0" />
-          <input
-            type="text"
-            placeholder="Search..."
-            style={{
-              background: 'transparent', outline: 'none', border: 'none',
-              fontSize: 13, color: '#e8eaee', width: '100%'
-            }}
-          />
-          <kbd className="hidden md:inline" style={{
-            fontSize: 10, color: '#4a505c',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 5, padding: '2px 5px'
-          }}>⌘K</kbd>
-        </div>
+        <p className="text-xs text-titanium-500 hidden sm:block">AWS Lambda cost optimization</p>
       </div>
  
       {/* Right */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }} className="shrink-0 relative">
-        {/* Bell */}
+        {/* Bell: opens Notifications, shows the real unread count */}
         <button
+          onClick={() => navigate('/notifications')}
+          aria-label={`Notifications, ${unread} unread`}
           style={{
             width: 34, height: 34, borderRadius: 8,
             background: 'rgba(255,255,255,0.04)',
@@ -65,12 +57,13 @@ export default function Topbar() {
           }}
         >
           <Bell size={15} color="#b8bdc7" />
-          <span style={{
-            position: 'absolute', top: 7, right: 7,
-            width: 7, height: 7, borderRadius: '50%',
-            background: '#4ee3f0',
-            boxShadow: '0 0 6px rgba(78,227,240,0.6)'
-          }} />
+          {unread > 0 && (
+            <span style={{
+              position: 'absolute', top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8,
+              background: '#4ee3f0', color: '#06070a', fontSize: 9, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px'
+            }}>{unread > 99 ? '99+' : unread}</span>
+          )}
         </button>
  
         {/* User menu */}

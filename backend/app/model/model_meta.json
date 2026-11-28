@@ -1,1 +1,356 @@
-{"accuracy": 99.7, "mae": 2.23, "exact_match": 99.7, "features": ["memory", "invocations", "duration", "cold_ratio", "hour", "util"], "training_samples": 4000, "data": "synthetic"}
+{
+  "feature_set": "real4",
+  "features": [
+    "Memory MB",
+    "Avg Duration ms",
+    "Peak Memory Used MB",
+    "Memory Utilization %"
+  ],
+  "version": "v3.0",
+  "trainedOn": "Measured AWS Lambda benchmark (36 workloads x 6 memory sizes)",
+  "accuracy": 45.7,
+  "metrics_held_out": {
+    "samples": 46,
+    "exact_accuracy_pct": 45.7,
+    "within_one_step_pct": 97.8,
+    "mean_cost_regret_pct": 22.3,
+    "unsafe_predictions": 0,
+    "mae_mb": 559.3
+  },
+  "train_workloads": 26,
+  "test_workloads": 10,
+  "rows": 156,
+  "label_distribution": {
+    "128": 12,
+    "1024": 17,
+    "2048": 86,
+    "3008": 41
+  },
+  "held_out_detail": [
+    {
+      "profile": "a0_c5m_s0",
+      "memory_mb": 128,
+      "peak_mb": 32.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s0",
+      "memory_mb": 256,
+      "peak_mb": 32.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s0",
+      "memory_mb": 512,
+      "peak_mb": 32.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s0",
+      "memory_mb": 1024,
+      "peak_mb": 93.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s0",
+      "memory_mb": 2048,
+      "peak_mb": 92.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s0",
+      "memory_mb": 3008,
+      "peak_mb": 32.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s200",
+      "memory_mb": 128,
+      "peak_mb": 32.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s200",
+      "memory_mb": 256,
+      "peak_mb": 32.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s200",
+      "memory_mb": 512,
+      "peak_mb": 32.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s200",
+      "memory_mb": 1024,
+      "peak_mb": 32.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s200",
+      "memory_mb": 2048,
+      "peak_mb": 32.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a0_c5m_s200",
+      "memory_mb": 3008,
+      "peak_mb": 32.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c0m_s200",
+      "memory_mb": 128,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 3008
+    },
+    {
+      "profile": "a60_c0m_s200",
+      "memory_mb": 256,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c0m_s200",
+      "memory_mb": 512,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c0m_s200",
+      "memory_mb": 1024,
+      "peak_mb": 93.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c0m_s200",
+      "memory_mb": 2048,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c0m_s200",
+      "memory_mb": 3008,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s0",
+      "memory_mb": 128,
+      "peak_mb": 92.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s0",
+      "memory_mb": 256,
+      "peak_mb": 92.0,
+      "label": 2048,
+      "predicted": 3008
+    },
+    {
+      "profile": "a60_c1m_s0",
+      "memory_mb": 512,
+      "peak_mb": 92.0,
+      "label": 2048,
+      "predicted": 3008
+    },
+    {
+      "profile": "a60_c1m_s0",
+      "memory_mb": 1024,
+      "peak_mb": 93.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s0",
+      "memory_mb": 2048,
+      "peak_mb": 92.0,
+      "label": 2048,
+      "predicted": 3008
+    },
+    {
+      "profile": "a60_c1m_s0",
+      "memory_mb": 3008,
+      "peak_mb": 92.0,
+      "label": 2048,
+      "predicted": 3008
+    },
+    {
+      "profile": "a60_c1m_s200",
+      "memory_mb": 128,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s200",
+      "memory_mb": 256,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s200",
+      "memory_mb": 512,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s200",
+      "memory_mb": 1024,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s200",
+      "memory_mb": 2048,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a60_c1m_s200",
+      "memory_mb": 3008,
+      "peak_mb": 92.0,
+      "label": 1024,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c0m_s0",
+      "memory_mb": 512,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c0m_s0",
+      "memory_mb": 1024,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c0m_s0",
+      "memory_mb": 2048,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c0m_s0",
+      "memory_mb": 3008,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c5m_s200",
+      "memory_mb": 512,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c5m_s200",
+      "memory_mb": 1024,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c5m_s200",
+      "memory_mb": 2048,
+      "peak_mb": 433.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a400_c5m_s200",
+      "memory_mb": 3008,
+      "peak_mb": 934.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a900_c1m_s0",
+      "memory_mb": 1024,
+      "peak_mb": 934.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a900_c1m_s0",
+      "memory_mb": 2048,
+      "peak_mb": 934.0,
+      "label": 3008,
+      "predicted": 2048
+    },
+    {
+      "profile": "a900_c1m_s0",
+      "memory_mb": 3008,
+      "peak_mb": 934.0,
+      "label": 3008,
+      "predicted": 3008
+    },
+    {
+      "profile": "a900_c5m_s200",
+      "memory_mb": 1024,
+      "peak_mb": 934.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a900_c5m_s200",
+      "memory_mb": 2048,
+      "peak_mb": 934.0,
+      "label": 2048,
+      "predicted": 2048
+    },
+    {
+      "profile": "a900_c5m_s200",
+      "memory_mb": 3008,
+      "peak_mb": 934.0,
+      "label": 2048,
+      "predicted": 3008
+    },
+    {
+      "profile": "a1700_c0m_s200",
+      "memory_mb": 2048,
+      "peak_mb": 1735.0,
+      "label": 3008,
+      "predicted": 3008
+    },
+    {
+      "profile": "a1700_c0m_s200",
+      "memory_mb": 3008,
+      "peak_mb": 1735.0,
+      "label": 3008,
+      "predicted": 3008
+    }
+  ],
+  "headroom": 1.25,
+  "latency_tolerance": 1.25,
+  "seed": 42
+}

@@ -35,13 +35,22 @@ export function AuthProvider({ children }) {
     } catch (e) { return { success: false, error: e.message } }
   }
 
+  // Keep the stored profile in step with changes saved on the Settings page
+  const updateUser = (changes) => {
+    setUser((prev) => {
+      const u = { ...prev, ...changes }
+      localStorage.setItem('ioc_user', JSON.stringify(u))
+      return u
+    })
+  }
+
   const logout = () => {
     localStorage.removeItem('ioc_user')
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, loading, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   )

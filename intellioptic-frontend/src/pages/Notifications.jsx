@@ -1,23 +1,26 @@
 import { useState, useEffect } from 'react'
-import { CheckCheck, Zap, AlertTriangle, Info, BellOff, RefreshCw } from 'lucide-react'
+import { CheckCheck, Zap, AlertTriangle, Info, Lightbulb, BellOff, RefreshCw } from 'lucide-react'
 import { notificationsAPI } from '../lib/api'
+import { timeAgo } from '../lib/format'
 
 const ICONS = {
-  optimization: { icon: Zap, color: '#3ddc97', bg: 'rgba(61,220,151,0.12)' },
+  action: { icon: Zap, color: '#3ddc97', bg: 'rgba(61,220,151,0.12)' },
+  recommendation: { icon: Lightbulb, color: '#4ee3f0', bg: 'rgba(78,227,240,0.12)' },
   alert: { icon: AlertTriangle, color: '#f0b94e', bg: 'rgba(240,185,78,0.12)' },
-  system: { icon: Info, color: '#4ee3f0', bg: 'rgba(78,227,240,0.12)' },
+  system: { icon: Info, color: '#7d8492', bg: 'rgba(125,132,146,0.12)' },
 }
-const TABS = ['All', 'Unread', 'Optimization', 'Alert', 'System']
+const TABS = ['All', 'Unread', 'Action', 'Recommendation', 'Alert', 'System']
 
 export default function Notifications() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('All')
+  const [error, setError] = useState('')
 
   const load = async () => {
-    setLoading(true)
+    setLoading(true); setError('')
     try { const r = await notificationsAPI.getAll(); setItems(r.notifications || []) }
-    catch { setItems([]) }
+    catch { setItems([]); setError('Could not load notifications. Is the backend running?') }
     finally { setLoading(false) }
   }
 
@@ -44,10 +47,12 @@ export default function Notifications() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-titanium-100">Notifications</h1>
-          <p className="text-xs text-titanium-500 mt-0.5">{items.filter(n => !n.read).length} unread</p>
+          <p className="text-xs text-titanium-500 mt-0.5">
+            {items.filter(n => !n.read).length} unread. Created by monitoring cycles and applied changes; choose what you receive in Settings.
+          </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={load} className="glass-card px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100">
+          <button onClick={load} className="glass-card px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100" aria-label="Refresh">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
           <button onClick={markAll} className="glass-card flex items-center gap-2 px-3 py-2 text-xs text-titanium-300 hover:text-titanium-100">
@@ -55,6 +60,8 @@ export default function Notifications() {
           </button>
         </div>
       </div>
+
+      {error && <div className="glass-card p-3 border border-danger/20"><p className="text-xs text-danger">{error}</p></div>}
 
       <div className="flex gap-1.5 flex-wrap">
         {TABS.map(t => (
@@ -75,15 +82,16 @@ export default function Notifications() {
             </div>
           </div>
         )) : filtered.length === 0 ? (
-          <div className="py-16 flex flex-col items-center gap-2">
+          <div className="py-16 flex flex-col items-center gap-2 px-4 text-center">
             <BellOff size={28} className="text-titanium-700" />
-            <p className="text-titanium-500 text-sm">No notifications.</p>
+            <p className="text-titanium-500 text-sm">No notifications yet.</p>
+            <p className="text-titanium-700 text-xs">They appear after a monitoring cycle finds a recommendation, a usage increase or a change is applied.</p>
           </div>
         ) : filtered.map(n => {
           const meta = ICONS[n.type] || ICONS.system
           const Icon = meta.icon
           return (
-            <div key={n.id} onClick={() => markOne(n.id)}
+            <div key={n.id} onClick={() => !n.read && markOne(n.id)}
               className={`flex gap-3 px-4 py-4 cursor-pointer hover:bg-white/4 transition-colors ${!n.read ? 'bg-white/3' : ''}`}>
               <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={15} color={meta.color} />
@@ -94,7 +102,7 @@ export default function Notifications() {
                   {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow shrink-0" />}
                 </div>
                 <p className="text-[11px] text-titanium-500 mt-1">{n.desc}</p>
-                <p className="text-[10px] text-titanium-700 mt-1">{n.time}</p>
+                <p className="text-[10px] text-titanium-700 mt-1">{timeAgo(n.createdAt)}</p>
               </div>
             </div>
           )

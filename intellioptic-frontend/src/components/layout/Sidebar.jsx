@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import { Cloud, Activity } from 'lucide-react'
+import { Cloud } from 'lucide-react'
 import { navItems } from '../../data/navigation'
+import EngineStatus from './EngineStatus'
 
 export default function Sidebar() {
   return (
@@ -21,7 +22,7 @@ export default function Sidebar() {
           <p style={{ fontSize: 13, fontWeight: 600, color: '#e8eaee', lineHeight: 1.3 }}>
             IntelliOptiCloud
           </p>
-          <p style={{ fontSize: 11, color: '#4a505c' }}>Free Tier v1.7</p>
+          <p style={{ fontSize: 11, color: '#4a505c' }}>Free Tier v2.0</p>
         </div>
       </div>
 
@@ -45,25 +46,8 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Status chip at bottom */}
-      <div
-        style={{
-          background: 'rgba(61,220,151,0.07)',
-          border: '1px solid rgba(61,220,151,0.15)',
-          borderRadius: 12,
-          padding: '10px 12px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginTop: 8
-        }}
-      >
-        <Activity size={14} color="#3ddc97" />
-        <div>
-          <p style={{ fontSize: 12, color: '#3ddc97', fontWeight: 600 }}>Engine Active</p>
-          <p style={{ fontSize: 10, color: '#4a505c', marginTop: 1 }}>Zero downtime · Autonomous</p>
-        </div>
-      </div>
+      {/* Real connection and autonomy status */}
+      <EngineStatus />
     </aside>
   )
 }
