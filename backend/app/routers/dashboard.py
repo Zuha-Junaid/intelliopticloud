@@ -1,36 +1,43 @@
+import time
+
 from fastapi import APIRouter
-from app.services.cloudwatch_service import get_functions
+
+from app.services import store
+from app.services.cloudwatch_service import get_inventory
+from app.services.cycle_service import history
+from app.services.savings_service import verified_savings
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+STARTED = time.time()
 
 
 @router.get("/summary")
 def get_summary():
-    fns = get_functions()
+    inv = get_inventory()
+    fns = inv["functions"]
     current = round(sum(f["monthlyCost"] for f in fns), 2)
+    saved = verified_savings()["totalMonthlySavingPkr"] if inv["source"] == "aws" else 0
+    baseline = round(current + saved, 2)
+    actions = store.list_actions(200)
+    today = store.utcnow().date().isoformat()
+    applied = [a for a in actions if a["status"] == "applied" and a["mode"] != "rollback"]
+    last_cycle = store.kv_get("last_cycle")
     return {
+        "source": inv["source"],
+        "warning": inv["warning"],
         "costSummary": {
-            # Real values from CloudWatch. No savings are claimed until optimizations are applied.
-            "previousMonthly": current,
+            "previousMonthly": baseline,
             "currentMonthly": current,
-            "savedAmount": 0,
-            "savingsPercent": 0,
+            "savedAmount": saved,
+            "savingsPercent": round(saved / baseline * 100, 1) if baseline else 0,
             "currency": "PKR",
         },
-        # SAMPLE DATA for chart illustration only (not measured)
-        "trendIsSample": True,
-        "savingsTrend": [
-            {"month": "Jul", "before": 50000, "after": 31000},
-            {"month": "Aug", "before": 50000, "after": 27000},
-            {"month": "Sep", "before": 50000, "after": 24000},
-            {"month": "Oct", "before": 50000, "after": 21000},
-            {"month": "Nov", "before": 50000, "after": 19000},
-            {"month": "Dec", "before": 50000, "after": 18000},
-        ],
+        "costHistory": history(),  # real snapshots, one point per monitoring cycle
         "systemHealth": {
-            "uptime": "N/A",
-            "lastOptimized": "Never",
+            "serverUptimeHours": round((time.time() - STARTED) / 3600, 1),
+            "lastOptimized": applied[0]["takenAt"] if applied else None,
+            "lastCycle": last_cycle["at"] if last_cycle else None,
             "functionsMonitored": len(fns),
-            "actionsToday": 0,
+            "actionsToday": sum(1 for a in applied if a["takenAt"][:10] == today),
         },
     }

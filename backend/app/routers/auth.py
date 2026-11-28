@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
-from app.models.schemas import RegisterRequest, LoginRequest
-from app.services.auth_service import register, authenticate, create_token
+from fastapi import APIRouter, Depends, HTTPException
+from app.models.schemas import RegisterRequest, LoginRequest, ProfileUpdate
+from app.security import get_current_user
+from app.services.auth_service import register, authenticate, create_token, update_profile
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -27,3 +28,14 @@ def login_user(body: LoginRequest):
         "token_type": "bearer",
         "user": {"name": user["name"], "email": user["email"], "accountType": user["accountType"]},
     }
+
+
+@router.put("/me")
+def update_me(body: ProfileUpdate, user=Depends(get_current_user)):
+    try:
+        updated = update_profile(user["sub"], body.name, body.accountType)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if not updated:
+        raise HTTPException(404, "User not found")
+    return {"user": updated}

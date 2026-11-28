@@ -1,31 +1,34 @@
+from collections import defaultdict
+
 from fastapi import APIRouter
-from app.services.cloudwatch_service import get_functions
+
+from app.services.cloudwatch_service import get_inventory
+from app.services.cycle_service import history
+from app.services.savings_service import verified_savings
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-TREND = [
-    {"month": "Jul", "before": 50000, "after": 31000},
-    {"month": "Aug", "before": 50000, "after": 27000},
-    {"month": "Sep", "before": 50000, "after": 24000},
-    {"month": "Oct", "before": 50000, "after": 21000},
-    {"month": "Nov", "before": 50000, "after": 19000},
-    {"month": "Dec", "before": 50000, "after": 18000},
-]
 
 @router.get("/savings")
 def savings_report():
-    detailed = [
-        {**m, "saved": m["before"] - m["after"],
-         "percentReduction": round((m["before"] - m["after"]) / m["before"] * 100, 1)}
-        for m in TREND
-    ]
-    return {"report": detailed}
+    """Savings measured from real billed durations before and after each applied change."""
+    v = verified_savings()
+    monthly = defaultdict(float)
+    for item in v["items"]:
+        if item["status"] == "verified" and item["monthlySavingPkr"] > 0:
+            monthly[item["takenAt"][:7]] += item["monthlySavingPkr"]
+    return {"verified": v["items"], "totalMonthlySavingPkr": v["totalMonthlySavingPkr"],
+            "monthly": [{"month": k, "saved": round(x, 2)} for k, x in sorted(monthly.items())]}
+
 
 @router.get("/cost-breakdown")
 def cost_breakdown():
-    fns = get_functions()
-    breakdown = sorted(
-        [{"name": f["name"], "cost": f["monthlyCost"]} for f in fns],
-        key=lambda x: x["cost"], reverse=True
-    )
-    return {"breakdown": breakdown}
+    inv = get_inventory()
+    breakdown = sorted([{"name": f["name"], "cost": f["monthlyCost"]} for f in inv["functions"]],
+                       key=lambda x: x["cost"], reverse=True)
+    return {"breakdown": breakdown, "source": inv["source"], "warning": inv["warning"]}
+
+
+@router.get("/history")
+def cost_history(days: int = 30):
+    return {"history": history(max(1, min(days, 365)))}

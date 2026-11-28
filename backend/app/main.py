@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import auth, dashboard, resources, optimization, reports, notifications
+from app.routers import auth, dashboard, resources, optimization, reports, notifications, system
 from app.security import get_current_user
 from app.services.optimizer_service import get_model
 
@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="IntelliOptiCloud API",
     description="AI-driven AWS Cost Optimization for Pakistani Startups & SMEs",
-    version="1.7",
+    version="2.0",
     lifespan=lifespan,
 )
 
@@ -38,9 +38,13 @@ for router in (dashboard, resources, optimization, reports, notifications):
     app.include_router(router.router, prefix="/api", dependencies=[Depends(get_current_user)])
 
 
+# System routes check their own credentials (JWT or the scheduler token).
+app.include_router(system.router, prefix="/api")
+
+
 @app.get("/")
 def root():
-    return {"app": "IntelliOptiCloud", "version": "1.7", "status": "running", "docs": "/docs"}
+    return {"app": "IntelliOptiCloud", "version": "2.0", "status": "running", "docs": "/docs"}
 
 
 @app.get("/health")

@@ -13,5 +13,19 @@ class Settings(BaseSettings):
     PKR_USD_RATE: float = 278.0
     DATABASE_URL: str = ""  # empty = local SQLite file; set it to use Postgres
 
+    # AWS Lambda list prices (US East, USD). Graviton (arm64) is 20% cheaper per GB-second.
+    PRICE_GBS_X86: float = 0.0000166667
+    PRICE_GBS_ARM: float = 0.0000133334
+    PRICE_PER_REQUEST: float = 0.0000002
+
+    # Applying changes to AWS is OFF unless explicitly enabled, and is limited to
+    # functions whose name starts with the allowed prefix (a second safety layer
+    # on top of the IAM policy).
+    APPLY_ENABLED: bool = False
+    APPLY_ALLOWED_PREFIX: str = "ioc-demo-"
+
+    # Secret used by the scheduled job (GitHub Actions) to call /api/system/run-cycle
+    CRON_TOKEN: str = ""
+
 
 settings = Settings()

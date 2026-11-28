@@ -51,3 +51,19 @@ def authenticate(email: str, password: str):
     if not row or not verify_password(password, row["password_hash"]):
         return None
     return {"name": row["name"], "email": row["email"], "accountType": row["account_type"]}
+
+ACCOUNT_TYPES = ("Startup", "SME", "Enterprise")
+
+
+def update_profile(email: str, name: str, account_type: str):
+    """Change the display name and account type of a user. Returns the user or None."""
+    from sqlalchemy import update
+    name = name.strip()
+    if not name or account_type not in ACCOUNT_TYPES:
+        raise ValueError("Name is required and account type must be Startup, SME or Enterprise")
+    with engine.begin() as conn:
+        res = conn.execute(update(users).where(users.c.email == email.strip().lower())
+                           .values(name=name, account_type=account_type))
+    if res.rowcount == 0:
+        return None
+    return {"name": name, "email": email.strip().lower(), "accountType": account_type}

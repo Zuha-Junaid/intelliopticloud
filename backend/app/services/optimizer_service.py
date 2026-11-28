@@ -4,17 +4,28 @@ from pathlib import Path
 import numpy as np
 from xgboost import XGBRegressor
 
+from app.config import settings
+from app.services import training
+from app.services.cloudwatch_service import supports_arm
+
 # Valid AWS Lambda memory sizes the model snaps its prediction to
 SIZES = np.array([128, 256, 512, 1024, 2048, 3008])
+HEADROOM = training.HEADROOM
 
-# Model trained in Google Colab (notebooks/IntelliOptiCloud_XGBoost_Training.ipynb)
 MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
 MODEL_FILE = MODEL_DIR / "memory_model.json"
 META_FILE = MODEL_DIR / "model_meta.json"
+# The benchmark is committed to Git (backend/data/ is ignored), so Render can retrain from it.
+BENCHMARK_DIR = Path(__file__).resolve().parent.parent.parent / "benchmark"
+TRAINING_CSV = BENCHMARK_DIR / "real_benchmark.csv"
+
+LEGACY_FEATURES = ["Memory MB", "Invocations", "Avg Duration", "Cold Start Ratio", "Hour of Day",
+                   "Memory Utilization %"]
 
 _model = None
 _accuracy = 0.0
 _source = "none"
+_meta = {}
 
 
 def _snap(values) -> np.ndarray:
@@ -23,27 +34,37 @@ def _snap(values) -> np.ndarray:
 
 
 def _load_colab_model() -> bool:
-    """Load the Colab-trained model if its files exist. Returns True on success."""
-    global _model, _accuracy, _source
+    """Load the trained model if its files exist. Returns True on success."""
+    global _model, _accuracy, _source, _meta
     if not MODEL_FILE.exists():
         return False
     try:
         m = XGBRegressor()
         m.load_model(str(MODEL_FILE))
         _model = m
-        if META_FILE.exists():
-            _accuracy = float(json.loads(META_FILE.read_text()).get("accuracy", 0.0))
-        _source = "colab"
-        print(f"Loaded Colab-trained model from {MODEL_FILE} (accuracy {_accuracy}%)")
+        _meta = json.loads(META_FILE.read_text()) if META_FILE.exists() else {}
+        _accuracy = float(_meta.get("accuracy", 0.0))
+        _source = "benchmark" if _meta.get("feature_set") == training.FEATURE_SET else "colab"
+        print(f"Loaded model from {MODEL_FILE} ({_source}, accuracy {_accuracy}%)")
         return True
     except Exception as exc:  # corrupt file etc. -> fall back to training
-        print(f"Could not load Colab model ({exc}); training locally instead")
+        print(f"Could not load model ({exc}); training locally instead")
         return False
 
 
 def _train() -> None:
-    """Fallback: train the same model locally on synthetic data."""
-    global _model, _accuracy, _source
+    """Retrain. Uses the real benchmark CSV when it exists, otherwise the synthetic fallback."""
+    global _model, _accuracy, _source, _meta
+    if TRAINING_CSV.exists():
+        try:
+            _meta = training.train_from_csv(TRAINING_CSV, MODEL_FILE, META_FILE)
+            m = XGBRegressor()
+            m.load_model(str(MODEL_FILE))
+            _model, _accuracy, _source = m, float(_meta["accuracy"]), "benchmark"
+            print(f"Model retrained on real benchmark data - held-out accuracy {_accuracy}%")
+            return
+        except Exception as exc:
+            print(f"Training on the benchmark file failed ({exc}); using the synthetic fallback")
     rng = np.random.default_rng(42)
     n = 5000
     memory = rng.choice(SIZES, n)
@@ -68,7 +89,9 @@ def _train() -> None:
     mae = float(np.mean(np.abs(_model.predict(X[test]) - y[test])))
     _accuracy = round(max(0.0, 100 - mae / float(y[test].mean()) * 100), 1)
     _source = "trained-at-startup"
-    print(f"XGBoost trained locally - Accuracy: {_accuracy}%, MAE: {mae:.2f}")
+    _meta = {"feature_set": "legacy6", "features": LEGACY_FEATURES, "version": "v2.3.1",
+             "trainedOn": "Synthetic cloud usage data (5,000 samples)", "accuracy": _accuracy}
+    print(f"XGBoost trained locally (synthetic) - Accuracy: {_accuracy}%, MAE: {mae:.2f}")
 
 
 def get_model() -> XGBRegressor:
@@ -77,13 +100,37 @@ def get_model() -> XGBRegressor:
     return _model
 
 
-def predict_memory(memory: int, invocations: int, duration: float) -> dict:
+def get_meta() -> dict:
+    get_model()
+    return dict(_meta)
+
+
+def _min_safe_size(max_used) -> int:
+    """Smallest valid size that still leaves headroom above the measured peak memory."""
+    need = float(max_used) * HEADROOM
+    for s in SIZES:
+        if s >= need:
+            return int(s)
+    return int(SIZES[-1])
+
+
+def predict_memory(memory: int, invocations: int, duration: float, max_used=None) -> dict:
     model = get_model()
-    # cold_ratio, hour and utilisation are not available from basic CloudWatch metrics,
-    # so typical defaults are used (see README limitations)
-    X = np.array([[memory, invocations, duration, 0.1, 12, 0.6]], dtype=float)
+    real = _meta.get("feature_set") == training.FEATURE_SET
+    if real:
+        if max_used is None or invocations <= 0:
+            return {"current": int(memory), "optimal": int(memory), "confidence": 0.0,
+                    "saves": False, "reduction_pct": 0, "basis": "no usage data yet"}
+        X = np.array([training.features(memory, duration, max_used)], dtype=float)
+        basis = "measured peak memory"
+    else:
+        # legacy model: cold_ratio, hour and utilisation are typical defaults
+        X = np.array([[memory, invocations, duration, 0.1, 12, 0.6]], dtype=float)
+        basis = "default utilisation"
     predicted = float(model.predict(X)[0])
     optimal = int(_snap([predicted])[0])
+    if max_used is not None:
+        optimal = max(optimal, _min_safe_size(max_used))  # never recommend a size that cannot hold the function
     confidence = round(max(50.0, 100 - abs(predicted - optimal) / optimal * 100), 1)
     return {
         "current": int(memory),
@@ -91,10 +138,14 @@ def predict_memory(memory: int, invocations: int, duration: float) -> dict:
         "confidence": confidence,
         "saves": optimal < memory,
         "reduction_pct": round((memory - optimal) / memory * 100, 1) if optimal < memory else 0,
+        "basis": basis,
     }
 
 
 def recommend_spot(invocations: int, duration: float) -> dict:
+    """Advisory score for how suitable a workload is for the cheaper compute option
+    (steady, high-volume, long enough to matter). AWS Lambda has no spot market, so the
+    option the system can actually APPLY is the Graviton (arm64) architecture."""
     score = 0
     if invocations > 50000:
         score += 30
@@ -109,6 +160,18 @@ def recommend_spot(invocations: int, duration: float) -> dict:
         "risk": "Low" if score >= 70 else "Medium" if score >= 50 else "High",
         "saving_pct": round(score * 0.8, 1) if score >= 50 else 0,
     }
+
+
+def recommend_architecture(runtime: str, architecture: str, invocations: int) -> dict:
+    """Graviton2 (arm64) is billed 20% less per GB-second than x86_64."""
+    saving = round((1 - settings.PRICE_GBS_ARM / settings.PRICE_GBS_X86) * 100, 1)
+    if architecture == "arm64":
+        return {"recommend": False, "saving_pct": 0, "reason": "already on arm64"}
+    if not supports_arm(runtime):
+        return {"recommend": False, "saving_pct": 0, "reason": "runtime or package type not supported"}
+    if invocations <= 0:
+        return {"recommend": False, "saving_pct": 0, "reason": "no usage yet"}
+    return {"recommend": True, "saving_pct": saving, "reason": "arm64 is billed 20% less per GB-second"}
 
 
 def get_accuracy() -> float:
