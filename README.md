@@ -40,7 +40,7 @@ backend/
                   store                settings, notifications, action log
     model/        memory_model.json + model_meta.json (the trained model)
   benchmark/      real_benchmark.csv (measured data) + training_report.json (metrics)
-  tests/          pytest suite (137 tests)
+  tests/          pytest suite (139 tests)
 intellioptic-frontend/   React app (Dashboard, Resources, Optimization, Reports, Notifications, Settings)
 tools/                   scripts that run in AWS CloudShell or train the model (no access keys needed)
 .github/workflows/       monitor.yml (15-minute cycle)
@@ -50,7 +50,7 @@ tools/                   scripts that run in AWS CloudShell or train the model (
 - **Monitor:** Lambda inventory, invocations and average duration (CloudWatch, 30 days) plus peak memory used and cold-start ratio from the Lambda `REPORT` log lines (7 days). Cost is estimated at AWS list prices from the real billed duration, memory and architecture (no fixed-duration assumption).
 - **Predict:** XGBoost model with 4 features (memory, average duration, peak memory used, utilisation). The label rule is fixed and documented in `backend/app/services/training.py`: the cheapest size that leaves 25% headroom over peak memory and stays within 25% of the fastest duration. The backend never recommends a size below the minimum safe size for the measured peak memory, and as a cost optimiser it shows a larger size only when the current one is too small for the measured peak memory.
 - **Decide:** memory right-sizing, Graviton (arm64) switch (20% lower price per GB-second) and an advisory "spot suitability" score (AWS Lambda has no spot market, so Graviton is the option that can really be applied).
-- **Apply (optional, off by default):** `APPLY_ENABLED=true` on the server, limited to functions named `ioc-demo-*`, three autonomy levels (monitor only / approve / automatic), 25% headroom check, refusal when no peak memory has been measured, change log and rollback.
+- **Apply (optional, off by default):** `APPLY_ENABLED=true` on the server, limited to functions named `ioc-demo-*`, three autonomy levels (monitor only / approve / automatic), 25% headroom check, refusal when no peak memory has been measured, change log and rollback. A *Try a size* control on the Optimization page lets the user run a manual memory experiment (any size that keeps the headroom); Reports then measures the real result.
 - **Verify:** billed cost per invocation before and after each change, from CloudWatch Logs; at least 20 invocations are needed on each side. Each change is measured only against its own period.
 - **Guard (closed loop):** once a change has enough new invocations, its measured result is judged: the cost per invocation must not rise by more than 5% and the average billed duration must not be more than 25% slower. A change that fails is reported ("Change made things worse"); only in the *automatic* level the system rolls it back ("Automatic rollback") and tells the user. Every change is judged once.
 - **Notify:** recommendations, usage increases, applied and verified changes, rollbacks and a weekly summary, filtered by the user's preferences.
@@ -117,7 +117,7 @@ pip install pytest pytest-cov httpx
 python -m pytest tests -v
 python -m pytest tests --cov=app --cov-branch
 ```
-137 tests, 95% line and branch coverage. The tests use a throw-away database, a simulated AWS (no network) and no credentials, whatever is in `.env`. They do not depend on which model file is shipped: tests that need a fixed recommendation set it themselves, and the model state is restored after every test.
+139 tests, 95% line and branch coverage. The tests use a throw-away database, a simulated AWS (no network) and no credentials, whatever is in `.env`. They do not depend on which model file is shipped: tests that need a fixed recommendation set it themselves, and the model state is restored after every test.
 
 ## Real measurements and verified savings
 All AWS steps run in **AWS CloudShell** (the `>_` icon in the AWS console, region N. Virginia / us-east-1) and need no access keys.

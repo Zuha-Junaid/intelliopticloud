@@ -27,9 +27,15 @@ function PipelineStep({ step, isLast }) {
 }
 
 // One recommendation row with its Apply buttons and an inline confirmation step.
-function RecCard({ rec, canApply, busy, onApply }) {
+const SIZES = [128, 256, 512, 1024, 2048, 3008]
+
+function RecCard({ rec, canApply, allowedPrefix, busy, onApply }) {
   const [pending, setPending] = useState(null)
+  const [trial, setTrial] = useState('')
   const m = rec.memory
+  // sizes that keep the 25% headroom over the measured peak memory
+  const safeSizes = rec.measured && rec.peak != null ? SIZES.filter((s) => s !== m.current && s >= rec.peak * 1.25) : []
+  const canTrial = canApply(rec) && rec.function.startsWith(allowedPrefix || '') && safeSizes.length > 0
   const ask = (kind, value, text) => setPending({ kind, value, text })
   const confirm = async () => { const p = pending; setPending(null); await onApply({ function: rec.function, kind: p.kind, value: p.value }) }
 
@@ -64,6 +70,16 @@ function RecCard({ rec, canApply, busy, onApply }) {
           </button>
         )}
         {rec.arch.recommend && !canApply(rec) && <span className="status-pending">arm64 would save {rec.arch.saving_pct}%</span>}
+        {canTrial && (
+          <span className="flex items-center gap-1" title="Manual experiment: choose any size that keeps 25% headroom over the measured peak memory. Reports then measures the real result.">
+            <select value={trial} onChange={(e) => setTrial(e.target.value)} className="text-[11px] bg-transparent border border-white/10 rounded-lg px-1.5 py-1 text-titanium-300">
+              <option value="">Try a size...</option>
+              {safeSizes.map((sz) => <option key={sz} value={sz} className="bg-base-950">{sz} MB</option>)}
+            </select>
+            <button disabled={busy || !trial} onClick={() => ask('memory', trial, `Manual experiment: change ${rec.function} from ${m.current} MB to ${trial} MB? The model did not recommend this size; the measured result decides whether it helps.`)}
+              className="text-[11px] text-titanium-300 border border-white/10 rounded-lg px-2.5 py-1 hover:bg-white/5 disabled:opacity-40">Apply</button>
+          </span>
+        )}
         {m.saves && !rec.measured && <span className="text-[10px] text-titanium-700">Run the function first: no measured memory use yet</span>}
         <span className="text-[10px] text-titanium-700" title="Advisory score from invocation volume and duration. AWS Lambda has no spot market.">
           Spot-suitability score {rec.spot.score}/80 ({rec.spot.risk} risk, advisory)
@@ -214,7 +230,7 @@ export default function Optimization() {
           <p className="text-xs text-titanium-500 mb-4">XGBoost memory prediction per function. Only functions named <code>{recs.allowedPrefix}*</code> can be changed.</p>
           <div className="flex flex-col gap-3 overflow-y-auto max-h-[28rem]">
             {(recs.recommendations || []).map(rec => (
-              <RecCard key={rec.function} rec={rec} canApply={canApply} busy={busy} onApply={applyChange} />
+              <RecCard key={rec.function} rec={rec} canApply={canApply} allowedPrefix={recs.allowedPrefix} busy={busy} onApply={applyChange} />
             ))}
             {!loading && (recs.recommendations || []).length === 0 && <p className="text-xs text-titanium-500">No Lambda functions found.</p>}
           </div>
