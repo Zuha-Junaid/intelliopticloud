@@ -40,7 +40,7 @@ backend/
                   store                settings, notifications, action log
     model/        memory_model.json + model_meta.json (the trained model)
   benchmark/      real_benchmark.csv (measured data) + training_report.json (metrics)
-  tests/          pytest suite (139 tests)
+  tests/          pytest suite (142 tests)
 intellioptic-frontend/   React app (Dashboard, Resources, Optimization, Reports, Notifications, Settings)
 tools/                   scripts that run in AWS CloudShell or train the model (no access keys needed)
 .github/workflows/       monitor.yml (15-minute cycle)
@@ -117,12 +117,13 @@ pip install pytest pytest-cov httpx
 python -m pytest tests -v
 python -m pytest tests --cov=app --cov-branch
 ```
-139 tests, 95% line and branch coverage. The tests use a throw-away database, a simulated AWS (no network) and no credentials, whatever is in `.env`. They do not depend on which model file is shipped: tests that need a fixed recommendation set it themselves, and the model state is restored after every test.
+142 tests, 95% line and branch coverage. The tests use a throw-away database, a simulated AWS (no network) and no credentials, whatever is in `.env`. They do not depend on which model file is shipped: tests that need a fixed recommendation set it themselves, and the model state is restored after every test.
 
 ## Real measurements and verified savings
 All AWS steps run in **AWS CloudShell** (the `>_` icon in the AWS console, region N. Virginia / us-east-1) and need no access keys.
 1. **Create the demo functions** (once): upload the files of the `tools` folder to CloudShell (`demo_handler.py`, `setup_demo.py`, `collect_benchmark.py`, `generate_load.py`), then `python3 setup_demo.py --user intelliopticloud-app`.
 2. **Collect the benchmark:** `python3 collect_benchmark.py --output real_benchmark.csv` (10-20 minutes), download the file and save it as `backend/benchmark/real_benchmark.csv`.
+2b. **More workloads (recommended, 20-30 minutes):** `python3 collect_benchmark.py --extra 60 --output real_benchmark_extra.csv` (60 new workloads; if CloudShell disconnects, run the same command again and it continues). Download it into `backend/benchmark/` and train on both files: `python tools/train_real.py backend/benchmark/real_benchmark.csv backend/benchmark/real_benchmark_extra.csv`.
 3. **Train:** from the project root `python tools/train_real.py` (writes `backend/app/model/*` and `backend/benchmark/training_report.json`), run the tests, commit and push. Render then uses the new model.
 4. **Turn on applying and the schedule:** in Render set `APPLY_ENABLED=true` and `CRON_TOKEN=<random>`; in GitHub add the secret `CRON_TOKEN` with the same value; in the Actions tab run **Monitoring cycle** once by hand (green tick).
 5. **Verify a saving:** `python3 generate_load.py --function ioc-demo-api --count 150` in CloudShell, then in the app open Optimization, press Apply on the function, run the same load again, and open Reports.
@@ -133,6 +134,7 @@ All AWS steps run in **AWS CloudShell** (the `>_` icon in the AWS console, regio
 - **Reports shows "waiting for usage":** a change needs at least 20 invocations before and after it. Each change is measured only until the next change on the same function, so after every change run the load script (or let real traffic arrive) **before** making another change to that function; otherwise the first change can never be verified.
 - **The app says sample data:** AWS credentials are missing or wrong in Render; the app then shows labelled sample data and applies nothing.
 - **Actions run fails with 401:** the `CRON_TOKEN` secret in GitHub is different from the one in Render.
+- **No automatic runs appear in the Actions tab:** GitHub can delay scheduled runs of a new workflow by hours. Plan B (free): create a job at cron-job.org that sends `POST https://intelliopticloud.onrender.com/api/system/run-cycle` every 15 minutes with the header `X-Cron-Token: <your CRON_TOKEN>`.
 - **First page load is slow:** the free Render server was asleep.
 
 ## Limitations

@@ -38,6 +38,21 @@ def load_rows(csv_path) -> list:
     return rows
 
 
+def merge_csvs(paths, output) -> int:
+    """Combine several benchmark files into one (the last value wins for the same workload and size)."""
+    merged = {}
+    for path in paths:
+        for r in load_rows(path):
+            merged[(r["profile"], r["memory_mb"])] = r
+    rows = sorted(merged.values(), key=lambda r: (r["profile"], r["memory_mb"]))
+    with open(output, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["profile", "memory_mb", "duration_ms", "billed_ms", "max_used_mb"])
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r[k] for k in w.fieldnames})
+    return len(rows)
+
+
 def cost_units(row) -> float:
     return row["memory_mb"] / 1024.0 * row["billed_ms"]  # GB-milliseconds
 

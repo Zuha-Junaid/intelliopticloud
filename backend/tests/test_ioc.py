@@ -1127,3 +1127,32 @@ def test_TC_R04_manual_memory_experiment_can_be_applied_and_is_judged(aws):
     assert out["new"] == 256 and aws.fns["ioc-demo-api"]["MemorySize"] == 256
     item = savings_service.verified_savings()["items"][0]
     assert item["status"] == "verified" and item["changePct"] < 0
+
+
+def test_TC_P03_extra_profiles_are_new_unique_and_repeatable():
+    extra = cb.extra_profiles(60)
+    ids = [p["id"] for p in extra]
+    assert len(ids) == 60 == len(set(ids)) and not set(ids) & {p["id"] for p in cb.profiles()}
+    assert ids == [p["id"] for p in cb.extra_profiles(60)]       # fixed seed: the same workloads every time
+    assert len({p["cpu_iters"] for p in extra}) >= 4 and len({p["sleep_ms"] for p in extra}) >= 4
+
+
+def test_TC_P04_interrupted_benchmark_resumes_without_repeating_work(tmp_path):
+    sim = SimLambda()
+    profs = cb.extra_profiles(6)
+    out = tmp_path / "x.csv"
+    first = cb.run(sim, out, workers=1, profs=profs, sizes=[1024, 2048], log=lambda *_: None, resume=True)
+    again = cb.run(sim, out, workers=1, profs=profs, sizes=[1024, 2048], log=lambda *_: None, resume=True)
+    assert len(first) > 0 and len(again) == len(first)           # nothing was measured twice
+    more = cb.run(sim, out, workers=1, profs=profs, sizes=[1024, 2048, 3008], log=lambda *_: None, resume=True)
+    assert len(more) > len(first)                                 # a new memory size is added to the same file
+
+
+def test_TC_P05_merged_benchmarks_train_a_model(tmp_path):
+    sim = SimLambda()
+    cb.run(sim, tmp_path / "a.csv", workers=1, log=lambda *_: None)
+    cb.run(sim, tmp_path / "b.csv", workers=1, profs=cb.extra_profiles(12), log=lambda *_: None, resume=True)
+    n = training.merge_csvs([tmp_path / "a.csv", tmp_path / "b.csv"], tmp_path / "all.csv")
+    assert n == len(training.load_rows(tmp_path / "a.csv")) + len(training.load_rows(tmp_path / "b.csv"))
+    meta = training.train_from_csv(tmp_path / "all.csv", tmp_path / "m.json", tmp_path / "meta.json")
+    assert meta["train_workloads"] + meta["test_workloads"] == len(cb.profiles()) + 12
