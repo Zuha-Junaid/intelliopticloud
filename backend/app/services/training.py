@@ -81,9 +81,20 @@ def snap(values) -> np.ndarray:
     return s[np.abs(v[:, None] - s[None, :]).argmin(axis=1)]
 
 
+def harmonise_peaks(rows) -> list:
+    """The peak memory of a workload does not depend on the memory it is configured with, but Lambda's
+    "Max Memory Used" is the highest value of a whole (reused) execution environment, so a measurement can
+    only be too HIGH, never too low. The lowest value measured for a workload at any size is therefore the
+    best estimate of its real peak, and is used for all of its rows."""
+    low = {}
+    for r in rows:
+        low[r["profile"]] = min(low.get(r["profile"], r["max_used_mb"]), r["max_used_mb"])
+    return [{**r, "max_used_mb": low[r["profile"]]} for r in rows]
+
+
 def build_dataset(rows):
     groups = {}
-    for r in rows:
+    for r in harmonise_peaks(rows):
         groups.setdefault(r["profile"], []).append(r)
     X, y, prof, src = [], [], [], []
     for p, rs in groups.items():
@@ -231,6 +242,7 @@ def train_from_csv(csv_path, model_path, meta_path, seed: int = 42, test_fractio
         "train_workloads": len(profiles) - len(test_profiles),
         "test_workloads": len(test_profiles),
         "rows": len(rows),
+        "peaks_harmonised": True,
         "label_distribution": {str(int(k)): int(v) for k, v in zip(*np.unique(y, return_counts=True))},
         "held_out_detail": detail,
         "headroom": HEADROOM,

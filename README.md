@@ -40,7 +40,7 @@ backend/
                   store                settings, notifications, action log
     model/        memory_model.json + model_meta.json (the trained model)
   benchmark/      real_benchmark.csv (measured data) + training_report.json (metrics)
-  tests/          pytest suite (142 tests)
+  tests/          pytest suite (144 tests)
 intellioptic-frontend/   React app (Dashboard, Resources, Optimization, Reports, Notifications, Settings)
 tools/                   scripts that run in AWS CloudShell or train the model (no access keys needed)
 .github/workflows/       monitor.yml (15-minute cycle)
@@ -117,7 +117,7 @@ pip install pytest pytest-cov httpx
 python -m pytest tests -v
 python -m pytest tests --cov=app --cov-branch
 ```
-142 tests, 95% line and branch coverage. The tests use a throw-away database, a simulated AWS (no network) and no credentials, whatever is in `.env`. They do not depend on which model file is shipped: tests that need a fixed recommendation set it themselves, and the model state is restored after every test.
+144 tests, 95% line and branch coverage. The tests use a throw-away database, a simulated AWS (no network) and no credentials, whatever is in `.env`. They do not depend on which model file is shipped: tests that need a fixed recommendation set it themselves, and the model state is restored after every test.
 
 ## Real measurements and verified savings
 All AWS steps run in **AWS CloudShell** (the `>_` icon in the AWS console, region N. Virginia / us-east-1) and need no access keys.
@@ -135,6 +135,7 @@ All AWS steps run in **AWS CloudShell** (the `>_` icon in the AWS console, regio
 - **The app says sample data:** AWS credentials are missing or wrong in Render; the app then shows labelled sample data and applies nothing.
 - **Actions run fails with 401:** the `CRON_TOKEN` secret in GitHub is different from the one in Render.
 - **No automatic runs appear in the Actions tab:** GitHub can delay scheduled runs of a new workflow by hours. Plan B (free): create a job at cron-job.org that sends `POST https://intelliopticloud.onrender.com/api/system/run-cycle` every 15 minutes with the header `X-Cron-Token: <your CRON_TOKEN>`.
+- **Benchmark peak memory looks too high:** Lambda reports "Max Memory Used" as the highest value of a whole reused execution environment. The benchmark therefore runs small workloads first, and training uses the lowest peak measured for each workload (`harmonise_peaks` in `training.py`).
 - **First page load is slow:** the free Render server was asleep.
 
 ## Limitations

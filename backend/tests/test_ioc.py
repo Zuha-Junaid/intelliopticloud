@@ -1156,3 +1156,23 @@ def test_TC_P05_merged_benchmarks_train_a_model(tmp_path):
     assert n == len(training.load_rows(tmp_path / "a.csv")) + len(training.load_rows(tmp_path / "b.csv"))
     meta = training.train_from_csv(tmp_path / "all.csv", tmp_path / "m.json", tmp_path / "meta.json")
     assert meta["train_workloads"] + meta["test_workloads"] == len(cb.profiles()) + 12
+
+
+def test_TC_P06_peak_memory_is_harmonised_per_workload():
+    rows = _rows((256, 200, 90), (512, 200, 400), (1024, 200, 900), (2048, 200, 90))   # reused environments inflate peaks
+    out = training.harmonise_peaks(rows)
+    assert {r["max_used_mb"] for r in out} == {90}
+    assert rows[1]["max_used_mb"] == 400                                                 # the input is not changed
+    two = _rows((256, 200, 90)) + [{**r, "profile": "q"} for r in _rows((512, 200, 300))]
+    assert {r["profile"]: r["max_used_mb"] for r in training.harmonise_peaks(two)} == {"p": 90, "q": 300}
+
+
+def test_TC_P07_benchmark_runs_small_workloads_first(tmp_path):
+    order = []
+
+    class Spy(SimLambda):
+        def invoke(self, FunctionName, LogType, Payload):
+            order.append(_json.loads(Payload)["alloc_mb"])
+            return super().invoke(FunctionName, LogType, Payload)
+    cb.run(Spy(), tmp_path / "o.csv", workers=1, profs=cb.extra_profiles(10), sizes=[3008], log=lambda *_: None)
+    assert order == sorted(order) and len(set(order)) > 2

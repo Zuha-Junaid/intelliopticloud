@@ -112,7 +112,10 @@ def run(client, output, workers=3, sizes=SIZES, profs=None, log=print, resume=Fa
     profs = profs or profiles()
     rows, done = load_done(output) if resume else ([], set())
     rows = [dict(r) for r in rows]
-    all_profs = profs
+    # Ascending memory held. Lambda reports "Max Memory Used" as the highest value of the whole execution
+    # environment, and environments are reused between invocations. Running the small workloads first means
+    # the highest value an environment has seen is always the peak of the workload being measured.
+    all_profs = sorted(profs, key=lambda p: p["alloc_mb"])
     for mem in sizes:
         profs = [p for p in all_profs if (p["id"], mem) not in done]
         if not profs:
